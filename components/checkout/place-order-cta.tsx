@@ -12,12 +12,14 @@ const GOLD_GRADIENT =
 const GOLD_DISABLED =
   'linear-gradient(135deg, oklch(0.80 0.05 75) 0%, oklch(0.82 0.04 77) 100%)';
 
-// ── Paystack inline script loader ───────────────────────────────────────────────
+// ── Paystack V2 Inline JS loader ────────────────────────────────────────────────
+// V1 used `callback` (not `onSuccess`) + setup()/openIframe().
+// V2 uses `new PaystackPop()` + newTransaction() with `onSuccess`/`onCancel`.
 
 function loadPaystackScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined') { reject(); return; }
-    if ((window as PaystackWindow).PaystackPop) { resolve(); return; }
+    if (typeof (window as unknown as PaystackWindow).PaystackPop === 'function') { resolve(); return; }
 
     const existing = document.getElementById('paystack-inline-js');
     if (existing) {
@@ -27,8 +29,8 @@ function loadPaystackScript(): Promise<void> {
     }
 
     const script = document.createElement('script');
-    script.id  = 'paystack-inline-js';
-    script.src = 'https://js.paystack.co/v1/inline.js';
+    script.id    = 'paystack-inline-js';
+    script.src   = 'https://js.paystack.co/v2/inline.js';
     script.async = true;
     script.onload  = () => resolve();
     script.onerror = () => reject();
@@ -36,22 +38,28 @@ function loadPaystackScript(): Promise<void> {
   });
 }
 
-interface PaystackWindow extends Window {
-  PaystackPop?: {
-    setup: (config: PaystackConfig) => { openIframe: () => void };
-  };
+interface PaystackTransaction {
+  reference: string;
+  trans:     string;
+  status:    string;
+  message:   string;
 }
 
 interface PaystackConfig {
   key:       string;
   email:     string;
   amount:    number;
-  ref:       string;
-  currency:  string;
-  label:     string;
+  ref?:      string;
+  currency?: string;
+  label?:    string;
   metadata?: Record<string, unknown>;
-  onSuccess: (response: { reference: string }) => void;
-  onClose:   () => void;
+  onSuccess: (transaction: PaystackTransaction) => void;
+  onCancel:  () => void;
+  onError?:  (error: { message: string }) => void;
+}
+
+interface PaystackWindow extends Window {
+  PaystackPop?: new () => { newTransaction: (config: PaystackConfig) => void };
 }
 
 // ── Shimmer overlay ─────────────────────────────────────────────────────────────
@@ -110,8 +118,8 @@ export default function PlaceOrderCta() {
       return;
     }
 
-    const pop = (window as PaystackWindow).PaystackPop;
-    if (!pop) {
+    const PaystackPop = (window as unknown as PaystackWindow).PaystackPop;
+    if (!PaystackPop) {
       setErrorMsg('Payment gateway unavailable. Please refresh the page and try again.');
       return;
     }
@@ -124,7 +132,8 @@ export default function PlaceOrderCta() {
 
     const reference = `aura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-    const handler = pop.setup({
+    const paystack = new PaystackPop();
+    paystack.newTransaction({
       key:      publicKey,
       email:    contactSummary!.email,
       amount:   finalTotal * 100,   // Paystack expects kobo
@@ -140,19 +149,21 @@ export default function PlaceOrderCta() {
         ],
       },
 
-      onSuccess: (response) => {
+      onSuccess: (transaction: PaystackTransaction) => {
         // Paystack's onSuccess is the authoritative client-side signal —
         // redirect immediately. Backend verification happens via the webhook.
         clearCart();
-        router.push(`/order-confirmation?ref=${response.reference}`);
+        router.push(`/order-confirmation?ref=${transaction.reference}`);
       },
 
-      onClose: () => {
+      onCancel: () => {
         // User dismissed popup — no error state, just remain on checkout
       },
-    });
 
-    handler.openIframe();
+      onError: (error: { message: string }) => {
+        setErrorMsg(`Payment error: ${error.message}. Please try again.`);
+      },
+    });
   }
 
   // ── Bank transfer flow ───────────────────────────────────────────────────────
