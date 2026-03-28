@@ -140,27 +140,11 @@ export default function PlaceOrderCta() {
         ],
       },
 
-      onSuccess: async (response) => {
-        setIsProcessing(true);
-        setErrorMsg(null);
-        try {
-          const res  = await fetch(`/api/paystack/verify?reference=${response.reference}`);
-          const data = await res.json() as { verified: boolean };
-          if (data.verified) {
-            clearCart();
-            router.push(`/order-confirmation?ref=${response.reference}`);
-          } else {
-            setErrorMsg(
-              `Payment received but verification failed. Please save your reference: ${response.reference} and contact support.`,
-            );
-            setIsProcessing(false);
-          }
-        } catch {
-          setErrorMsg(
-            `Verification error. Please save your reference: ${response.reference} and contact support.`,
-          );
-          setIsProcessing(false);
-        }
+      onSuccess: (response) => {
+        // Paystack's onSuccess is the authoritative client-side signal —
+        // redirect immediately. Backend verification happens via the webhook.
+        clearCart();
+        router.push(`/order-confirmation?ref=${response.reference}`);
       },
 
       onClose: () => {
@@ -263,7 +247,7 @@ export default function PlaceOrderCta() {
             >
               <Loader2 size={16} strokeWidth={2} className="animate-spin" />
               <span className="text-[0.68rem] tracking-[0.28em] uppercase font-medium">
-                {paymentMethod?.id === 'paystack' ? 'Verifying…' : 'Processing…'}
+                Processing…
               </span>
             </motion.span>
           ) : (
