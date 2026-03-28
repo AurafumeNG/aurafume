@@ -4,18 +4,12 @@ import { useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Minus, Plus, Trash2, Heart } from 'lucide-react';
-import {
-  motion,
-  useMotionValue,
-  animate,
-  AnimatePresence,
-  type PanInfo,
-} from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useCart, type CartItem } from '@/components/shop/cart-context';
 
 const REVEAL_WIDTH   = 144; // 72px per button × 2
-const SNAP_THRESHOLD = 52;  // minimum drag (px) to snap open
-const QUICK_SWIPE_V  = -350; // px/s — velocity to treat as intentional swipe
+const SNAP_THRESHOLD = 48;  // px dragged left before snapping open
+const VELOCITY_THRESHOLD = 0.3; // px/ms — quick flick to open
 
 interface CartItemCardProps {
   item: CartItem;
@@ -24,96 +18,150 @@ interface CartItemCardProps {
 export default function CartItemCard({ item }: CartItemCardProps) {
   const { removeFromCart, updateQty, saveForLater } = useCart();
 
-  const x = useMotionValue(0);
+  // Ref to the draggable card DOM node — we manipulate it directly
+  // so React re-renders never interfere with the gesture
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  // Track open state in a ref so it's never stale in event closures
-  const isOpenRef = useRef(false);
+  // Persistent drag state — never triggers re-renders
+  const isOpenRef        = useRef(false);
+  const dragStartXRef    = useRef(0);
+  const dragStartYRef    = useRef(0);
+  const currentXRef      = useRef(0);   // live translateX during drag
+  const touchStartMs     = useRef(0);
+  const isHorizontalRef  = useRef<boolean | null>(null); // null = undecided
 
-  // Clamp x within [−REVEAL_WIDTH, 0] during drag (no dragConstraints used)
-  function handleDrag() {
-    const cur = x.get();
-    if (cur > 0)             x.set(0);
-    if (cur < -REVEAL_WIDTH) x.set(-REVEAL_WIDTH);
+  // ── Snap helpers ──────────────────────────────────────────────
+  function snapTo(targetX: number) {
+    const el = cardRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.32s cubic-bezier(0.25, 1, 0.5, 1)';
+    el.style.transform  = `translateX(${targetX}px)`;
+    currentXRef.current = targetX;
+    isOpenRef.current   = targetX < -8;
   }
 
-  function handleDragEnd(_: PointerEvent, info: PanInfo) {
-    // Project from wherever the card was before this gesture started
-    const base      = isOpenRef.current ? -REVEAL_WIDTH : 0;
-    const projected = Math.min(0, Math.max(-REVEAL_WIDTH, base + info.offset.x));
+  function snapOpen()   { snapTo(-REVEAL_WIDTH); }
+  function snapClosed() { snapTo(0); }
 
-    const shouldReveal = projected < -SNAP_THRESHOLD || info.velocity.x < QUICK_SWIPE_V;
-    isOpenRef.current  = shouldReveal;
+  // ── Touch handlers ────────────────────────────────────────────
+  function handleTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0];
+    dragStartXRef.current   = touch.clientX;
+    dragStartYRef.current   = touch.clientY;
+    touchStartMs.current    = Date.now();
+    isHorizontalRef.current = null; // direction not yet determined
 
-    // Defer so Framer's internal drag-end cleanup finishes first,
-    // preventing its internal spring from overriding our animate() call
-    requestAnimationFrame(() => {
-      animate(x, shouldReveal ? -REVEAL_WIDTH : 0, {
-        type: 'spring',
-        stiffness: 400,
-        damping: 40,
-      });
-    });
+    const el = cardRef.current;
+    if (el) el.style.transition = 'none'; // instant follow during drag
   }
 
-  function snapClosed() {
-    isOpenRef.current = false;
-    animate(x, 0, { type: 'spring', stiffness: 400, damping: 40 });
+  function handleTouchMove(e: React.TouchEvent) {
+    const touch  = e.touches[0];
+    const dX     = touch.clientX - dragStartXRef.current;
+    const dY     = touch.clientY - dragStartYRef.current;
+
+    // Determine gesture direction on first significant movement
+    if (isHorizontalRef.current === null) {
+      if (Math.abs(dX) < 4 && Math.abs(dY) < 4) return; // too small to decide
+      isHorizontalRef.current = Math.abs(dX) > Math.abs(dY);
+    }
+
+    // Only drive the card horizontally; let vertical touches scroll
+    if (!isHorizontalRef.current) return;
+
+    // Prevent page from scrolling during a horizontal drag
+    e.preventDefault();
+
+    const base = isOpenRef.current ? -REVEAL_WIDTH : 0;
+    const newX = Math.min(0, Math.max(-REVEAL_WIDTH, base + dX));
+
+    const el = cardRef.current;
+    if (el) el.style.transform = `translateX(${newX}px)`;
+    currentXRef.current = newX;
   }
 
+  function handleTouchEnd(e: React.TouchEvent) {
+    // If direction was never determined (tap, no drag), close if open
+    if (isHorizontalRef.current === null) {
+      if (isOpenRef.current) snapClosed();
+      return;
+    }
+
+    // Calculate velocity (px / ms). Negative = moving left.
+    const elapsed  = Date.now() - touchStartMs.current;
+    const totalDX  = e.changedTouches[0].clientX - dragStartXRef.current;
+    const velocity = elapsed > 0 ? totalDX / elapsed : 0;
+
+    const isQuickFlick = velocity < -VELOCITY_THRESHOLD;
+    const isPastMid    = currentXRef.current < -SNAP_THRESHOLD;
+
+    if (isPastMid || isQuickFlick) {
+      snapOpen();
+    } else {
+      snapClosed();
+    }
+  }
+
+  function handleTouchCancel() {
+    // Restore whichever state was active before the cancelled gesture
+    snapTo(isOpenRef.current ? -REVEAL_WIDTH : 0);
+  }
+
+  // ── Action handlers ───────────────────────────────────────────
   function handleSave() {
     snapClosed();
-    setTimeout(() => saveForLater(item.productId, item.size), 220);
+    setTimeout(() => saveForLater(item.productId, item.size), 350);
   }
 
   function handleRemove() {
     snapClosed();
-    setTimeout(() => removeFromCart(item.productId, item.size), 220);
+    setTimeout(() => removeFromCart(item.productId, item.size), 350);
   }
 
   const subtotal = item.pricePerUnit * item.qty;
 
   return (
-    <div
-      className="relative overflow-hidden"
-      // pan-y lets the page scroll vertically while we capture horizontal drag
-      style={{ touchAction: 'pan-y' }}
-    >
-      {/* ── Action strip ─────────────────────────────────────────── */}
-      {/* Absolute behind the card; revealed when card slides left. Mobile only. */}
+    // touch-action: pan-y lets vertical page scroll happen normally;
+    // we call e.preventDefault() in onTouchMove only when horizontal
+    <div className="relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
+
+      {/* ── Action strip (always in DOM, behind the card) ────── */}
       <div
         aria-hidden
-        className="sm:hidden absolute right-0 top-0 bottom-0 flex"
+        className="sm:hidden absolute inset-y-0 right-0 flex"
         style={{ width: REVEAL_WIDTH }}
       >
         <button
           onClick={handleSave}
-          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-muted text-muted-foreground active:brightness-95"
+          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-muted text-muted-foreground"
         >
-          <Heart size={17} strokeWidth={1.8} />
+          <Heart size={18} strokeWidth={1.8} />
           <span className="text-[0.5rem] tracking-[0.14em] uppercase">Save</span>
         </button>
 
         <button
           onClick={handleRemove}
-          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-destructive text-destructive-foreground active:brightness-95"
+          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-destructive text-destructive-foreground"
         >
-          <Trash2 size={17} strokeWidth={1.8} />
+          <Trash2 size={18} strokeWidth={1.8} />
           <span className="text-[0.5rem] tracking-[0.14em] uppercase">Remove</span>
         </button>
       </div>
 
-      {/* ── Draggable card ──────────────────────────────────────── */}
-      <motion.div
-        style={{ x }}
-        drag="x"
-        // No dragConstraints — we clamp in onDrag so there is no
-        // internal correction spring that can fight our animate() call
-        dragMomentum={false}
-        onDrag={handleDrag}
-        onDragEnd={handleDragEnd}
-        // Tapping the card while open closes it
-        onTap={() => { if (isOpenRef.current) snapClosed(); }}
-        className="relative z-10 bg-background border border-border flex gap-4 p-4 cursor-grab active:cursor-grabbing sm:cursor-default"
+      {/* ── Draggable card ────────────────────────────────────── */}
+      {/*
+        Pure native touch events — no Framer Motion drag.
+        We write transform directly to the DOM node so gesture
+        updates happen at 60 fps without triggering React re-renders.
+      */}
+      <div
+        ref={cardRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+        className="relative z-10 bg-background border border-border flex gap-4 p-4 select-none"
+        style={{ transform: 'translateX(0)', willChange: 'transform' }}
       >
         {/* Product image → PDP */}
         <Link
@@ -184,7 +232,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.12 }}
-                  className="w-8 h-7 flex items-center justify-center border-t border-b border-border text-[0.78rem] tabular-nums select-none"
+                  className="w-8 h-7 flex items-center justify-center border-t border-b border-border text-[0.78rem] tabular-nums"
                 >
                   {item.qty}
                 </motion.span>
@@ -214,7 +262,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
                 </motion.span>
               </AnimatePresence>
 
-              {/* Desktop-only explicit buttons */}
+              {/* Desktop-only: always-visible action buttons */}
               <div className="hidden sm:flex items-center">
                 <button
                   onClick={handleSave}
@@ -235,7 +283,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
 
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
