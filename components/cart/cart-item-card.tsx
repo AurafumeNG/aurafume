@@ -1,14 +1,21 @@
 'use client';
 
+import { useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Minus, Plus, Trash2, Heart } from 'lucide-react';
-import { motion, useMotionValue, animate, AnimatePresence, type PanInfo } from 'motion/react';
+import {
+  motion,
+  useMotionValue,
+  animate,
+  AnimatePresence,
+  type PanInfo,
+} from 'motion/react';
 import { useCart, type CartItem } from '@/components/shop/cart-context';
 
-// Width of the revealed action strip (2 buttons × 72px)
-const REVEAL_WIDTH  = 144;
-const SNAP_THRESHOLD = 56; // how far left the user must drag before it snaps open
+const REVEAL_WIDTH   = 144; // 72px per button × 2
+const SNAP_THRESHOLD = 52;  // minimum drag (px) to snap open
+const QUICK_SWIPE_V  = -350; // px/s — velocity to treat as intentional swipe
 
 interface CartItemCardProps {
   item: CartItem;
@@ -16,85 +23,104 @@ interface CartItemCardProps {
 
 export default function CartItemCard({ item }: CartItemCardProps) {
   const { removeFromCart, updateQty, saveForLater } = useCart();
+
   const x = useMotionValue(0);
 
-  function snapTo(target: number) {
-    animate(x, target, { type: 'spring', stiffness: 420, damping: 38 });
+  // Track open state in a ref so it's never stale in event closures
+  const isOpenRef = useRef(false);
+
+  // Clamp x within [−REVEAL_WIDTH, 0] during drag (no dragConstraints used)
+  function handleDrag() {
+    const cur = x.get();
+    if (cur > 0)             x.set(0);
+    if (cur < -REVEAL_WIDTH) x.set(-REVEAL_WIDTH);
   }
 
   function handleDragEnd(_: PointerEvent, info: PanInfo) {
-    // If already partially open and dragging right, close
-    // If dragging left past threshold, snap open; otherwise snap closed
-    const target = info.offset.x < -SNAP_THRESHOLD ? -REVEAL_WIDTH : 0;
-    snapTo(target);
+    // Project from wherever the card was before this gesture started
+    const base      = isOpenRef.current ? -REVEAL_WIDTH : 0;
+    const projected = Math.min(0, Math.max(-REVEAL_WIDTH, base + info.offset.x));
+
+    const shouldReveal = projected < -SNAP_THRESHOLD || info.velocity.x < QUICK_SWIPE_V;
+    isOpenRef.current  = shouldReveal;
+
+    // Defer so Framer's internal drag-end cleanup finishes first,
+    // preventing its internal spring from overriding our animate() call
+    requestAnimationFrame(() => {
+      animate(x, shouldReveal ? -REVEAL_WIDTH : 0, {
+        type: 'spring',
+        stiffness: 400,
+        damping: 40,
+      });
+    });
   }
 
-  function closeReveal() {
-    snapTo(0);
+  function snapClosed() {
+    isOpenRef.current = false;
+    animate(x, 0, { type: 'spring', stiffness: 400, damping: 40 });
   }
 
   function handleSave() {
-    snapTo(0);
-    // small delay so the card visually closes before being removed from DOM
-    setTimeout(() => saveForLater(item.productId, item.size), 180);
+    snapClosed();
+    setTimeout(() => saveForLater(item.productId, item.size), 220);
   }
 
   function handleRemove() {
-    snapTo(0);
-    setTimeout(() => removeFromCart(item.productId, item.size), 180);
+    snapClosed();
+    setTimeout(() => removeFromCart(item.productId, item.size), 220);
   }
 
   const subtotal = item.pricePerUnit * item.qty;
 
   return (
-    // Outer wrapper clips the action strip that sits behind the card
-    <div className="relative overflow-hidden touch-pan-y">
-
-      {/* ── Action strip (behind the draggable card) ────────────── */}
-      {/* Only shown on mobile via the swipe gesture */}
+    <div
+      className="relative overflow-hidden"
+      // pan-y lets the page scroll vertically while we capture horizontal drag
+      style={{ touchAction: 'pan-y' }}
+    >
+      {/* ── Action strip ─────────────────────────────────────────── */}
+      {/* Absolute behind the card; revealed when card slides left. Mobile only. */}
       <div
+        aria-hidden
         className="sm:hidden absolute right-0 top-0 bottom-0 flex"
         style={{ width: REVEAL_WIDTH }}
-        aria-hidden
       >
         <button
           onClick={handleSave}
-          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-muted text-muted-foreground active:opacity-80"
+          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-muted text-muted-foreground active:brightness-95"
         >
-          <Heart size={16} strokeWidth={1.8} />
-          <span className="text-[0.52rem] tracking-[0.14em] uppercase">Save</span>
+          <Heart size={17} strokeWidth={1.8} />
+          <span className="text-[0.5rem] tracking-[0.14em] uppercase">Save</span>
         </button>
+
         <button
           onClick={handleRemove}
-          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-destructive text-destructive-foreground active:opacity-80"
+          className="flex-1 flex flex-col items-center justify-center gap-1.5 bg-destructive text-destructive-foreground active:brightness-95"
         >
-          <Trash2 size={16} strokeWidth={1.8} />
-          <span className="text-[0.52rem] tracking-[0.14em] uppercase">Remove</span>
+          <Trash2 size={17} strokeWidth={1.8} />
+          <span className="text-[0.5rem] tracking-[0.14em] uppercase">Remove</span>
         </button>
       </div>
 
       {/* ── Draggable card ──────────────────────────────────────── */}
       <motion.div
         style={{ x }}
-        // Drag only on mobile (sm+ will have explicit buttons)
         drag="x"
-        dragConstraints={{ left: -REVEAL_WIDTH, right: 0 }}
-        dragElastic={{ left: 0.05, right: 0.15 }}
+        // No dragConstraints — we clamp in onDrag so there is no
+        // internal correction spring that can fight our animate() call
         dragMomentum={false}
+        onDrag={handleDrag}
         onDragEnd={handleDragEnd}
-        // Tapping the card when revealed snaps it closed
-        onTap={() => {
-          // Only close if the card is open; don't interfere with link taps
-          if (x.get() < -8) closeReveal();
-        }}
+        // Tapping the card while open closes it
+        onTap={() => { if (isOpenRef.current) snapClosed(); }}
         className="relative z-10 bg-background border border-border flex gap-4 p-4 cursor-grab active:cursor-grabbing sm:cursor-default"
       >
-        {/* Product image — links to PDP */}
+        {/* Product image → PDP */}
         <Link
           href={`/shop/${item.slug}`}
-          onClick={closeReveal}
-          className="shrink-0 block"
+          onClick={() => { if (isOpenRef.current) snapClosed(); }}
           draggable={false}
+          className="shrink-0"
         >
           <div className="relative w-20 h-26 overflow-hidden bg-muted">
             <Image
@@ -108,14 +134,14 @@ export default function CartItemCard({ item }: CartItemCardProps) {
           </div>
         </Link>
 
-        {/* Content column */}
+        {/* Content */}
         <div className="flex-1 min-w-0 flex flex-col gap-1.5">
 
-          {/* Row: name + unit price */}
+          {/* Name + unit price */}
           <div className="flex items-start justify-between gap-2">
             <Link
               href={`/shop/${item.slug}`}
-              onClick={closeReveal}
+              onClick={() => { if (isOpenRef.current) snapClosed(); }}
               draggable={false}
               className="flex-1 min-w-0"
             >
@@ -123,7 +149,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
                 {item.name}
               </h3>
             </Link>
-            <span className="text-[0.75rem] text-foreground/70 shrink-0 tabular-nums whitespace-nowrap">
+            <span className="text-[0.75rem] text-foreground/70 shrink-0 tabular-nums">
               ₦{item.pricePerUnit.toLocaleString()}
             </span>
           </div>
@@ -138,7 +164,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
             {item.size}
           </span>
 
-          {/* Row: qty stepper + subtotal + desktop actions */}
+          {/* Qty stepper + subtotal + desktop actions */}
           <div className="flex items-center justify-between gap-2 mt-auto pt-1">
 
             {/* Stepper */}
@@ -150,6 +176,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
               >
                 <Minus size={10} strokeWidth={2.2} />
               </button>
+
               <AnimatePresence mode="wait">
                 <motion.span
                   key={item.qty}
@@ -162,6 +189,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
                   {item.qty}
                 </motion.span>
               </AnimatePresence>
+
               <button
                 onClick={() => updateQty(item.productId, item.size, item.qty + 1)}
                 aria-label="Increase quantity"
@@ -171,8 +199,8 @@ export default function CartItemCard({ item }: CartItemCardProps) {
               </button>
             </div>
 
-            {/* Right: subtotal + desktop action buttons */}
-            <div className="flex items-center gap-2">
+            {/* Subtotal + desktop action icons */}
+            <div className="flex items-center gap-1.5">
               <AnimatePresence mode="wait">
                 <motion.span
                   key={subtotal}
@@ -186,7 +214,7 @@ export default function CartItemCard({ item }: CartItemCardProps) {
                 </motion.span>
               </AnimatePresence>
 
-              {/* Desktop-only explicit action buttons */}
+              {/* Desktop-only explicit buttons */}
               <div className="hidden sm:flex items-center">
                 <button
                   onClick={handleSave}
@@ -208,7 +236,6 @@ export default function CartItemCard({ item }: CartItemCardProps) {
           </div>
         </div>
       </motion.div>
-
     </div>
   );
 }
