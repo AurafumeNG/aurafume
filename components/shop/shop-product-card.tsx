@@ -3,36 +3,8 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Heart, ShoppingBag, Star } from 'lucide-react';
+import { Heart, ShoppingBag } from 'lucide-react';
 import type { ShopProduct, ViewMode } from './types';
-
-// ── Star rating ──────────────────────────────────────────────────────
-function StarRating({ rating, count }: { rating: number; count: number }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex items-center gap-0.5">
-        {[1, 2, 3, 4, 5].map(i => {
-          const filled = rating >= i;
-          const half   = !filled && rating >= i - 0.5;
-          return (
-            <span key={i} className="relative inline-block">
-              <Star size={10} className="text-border" fill="currentColor" />
-              {(filled || half) && (
-                <span
-                  className="absolute inset-0 overflow-hidden"
-                  style={{ width: filled ? '100%' : '50%' }}
-                >
-                  <Star size={10} className="text-accent" fill="currentColor" />
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </div>
-      <span className="text-[0.6rem] text-muted-foreground tabular-nums">({count})</span>
-    </div>
-  );
-}
 
 // ── Badge ────────────────────────────────────────────────────────────
 const BADGE_STYLES: Record<string, string> = {
@@ -85,7 +57,6 @@ export default function ShopProductCard({
                 {product.name}
               </h3>
             </Link>
-            <StarRating rating={product.rating} count={product.reviewCount} />
           </div>
 
           <div className="flex items-center justify-between gap-3 mt-3">
@@ -176,7 +147,6 @@ export default function ShopProductCard({
             ₦{product.price.toLocaleString('en-NG')}
           </span>
         </div>
-        <StarRating rating={product.rating} count={product.reviewCount} />
       </div>
     </article>
   );
