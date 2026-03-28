@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'motion/react';
@@ -110,9 +110,9 @@ function BankTransferInstructions() {
   );
 }
 
-// ── Main page ───────────────────────────────────────────────────────────────────
+// ── Inner page (uses useSearchParams — must be inside Suspense) ─────────────────
 
-export default function OrderConfirmationPage() {
+function OrderConfirmationInner() {
   const params    = useSearchParams();
   const reference = params.get('ref');
   const method    = params.get('method');
@@ -235,5 +235,15 @@ export default function OrderConfirmationPage() {
       </motion.p>
 
     </div>
+  );
+}
+
+// ── Default export — wraps inner page in Suspense ───────────────────────────────
+
+export default function OrderConfirmationPage() {
+  return (
+    <Suspense>
+      <OrderConfirmationInner />
+    </Suspense>
   );
 }
