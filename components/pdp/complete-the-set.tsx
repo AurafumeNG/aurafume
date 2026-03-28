@@ -65,7 +65,16 @@ export default function CompleteTheSet({ mainProduct, bundleSlugs }: CompleteThe
     if (added) return;
     allProducts.forEach(p => {
       const variant = p.variants.find(v => v.stock > 0) ?? p.variants[0];
-      addToCart(p.id, variant.size, 1);
+      addToCart({
+        productId:    p.id,
+        slug:         p.slug,
+        name:         p.name,
+        scentFamily:  p.scentFamily,
+        image:        p.images[0],
+        size:         variant.size,
+        pricePerUnit: variant.price,
+        qty:          1,
+      });
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2500);

@@ -25,7 +25,16 @@ function RelatedCard({ slug }: { slug: string }) {
     e.preventDefault();
     e.stopPropagation();
     if (added) return;
-    addToCart(product.id, firstInStock.size, 1);
+    addToCart({
+      productId:    product.id,
+      slug:         product.slug,
+      name:         product.name,
+      scentFamily:  product.scentFamily,
+      image:        product.images[0],
+      size:         firstInStock.size,
+      pricePerUnit: firstInStock.price,
+      qty:          1,
+    });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   }

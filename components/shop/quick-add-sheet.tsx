@@ -37,7 +37,16 @@ export default function QuickAddSheet({ product, isOpen, onClose }: QuickAddShee
 
   function handleAdd() {
     if (!product || !selectedSize || confirmed) return;
-    addToCart(product.id, selectedSize, qty);
+    addToCart({
+      productId:    product.id,
+      slug:         product.href.replace('/shop/', ''),
+      name:         product.name,
+      scentFamily:  product.scentFamily,
+      image:        product.image,
+      size:         selectedSize,
+      pricePerUnit: product.price,
+      qty,
+    });
     setConfirmed(true);
     setTimeout(() => {
       setConfirmed(false);

@@ -9,16 +9,24 @@ import { useCart } from '@/components/shop/cart-context';
 interface ActionButtonsProps {
   productId: string;
   productSlug: string;
+  productName: string;
+  productImage: string;
+  scentFamily: string;
   selectedSize: string;
   quantity: number;
+  pricePerUnit: number;
   isOutOfStock: boolean;
 }
 
 export default function ActionButtons({
   productId,
   productSlug,
+  productName,
+  productImage,
+  scentFamily,
   selectedSize,
   quantity,
+  pricePerUnit,
   isOutOfStock,
 }: ActionButtonsProps) {
   const { addToCart } = useCart();
@@ -27,14 +35,32 @@ export default function ActionButtons({
 
   function handleAddToCart() {
     if (isOutOfStock || addState === 'added') return;
-    addToCart(productId, selectedSize, quantity);
+    addToCart({
+      productId,
+      slug: productSlug,
+      name: productName,
+      scentFamily,
+      image: productImage,
+      size: selectedSize,
+      pricePerUnit,
+      qty: quantity,
+    });
     setAddState('added');
     setTimeout(() => setAddState('idle'), 2000);
   }
 
   function handleBuyNow() {
     if (isOutOfStock) return;
-    addToCart(productId, selectedSize, quantity);
+    addToCart({
+      productId,
+      slug: productSlug,
+      name: productName,
+      scentFamily,
+      image: productImage,
+      size: selectedSize,
+      pricePerUnit,
+      qty: quantity,
+    });
     router.push('/cart');
   }
 
