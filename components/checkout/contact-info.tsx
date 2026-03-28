@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useId } from 'react';
+import { useState, useId, useEffect } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle } from 'lucide-react';
+import { useCheckout } from './checkout-context';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ function Field({
 
 export default function ContactInfo() {
   const uid = useId();
+  const { setContactSummary } = useCheckout();
 
   const [form, setForm] = useState<ContactForm>({
     firstName: '',
@@ -148,6 +150,18 @@ export default function ContactInfo() {
   const [touched, setTouched] = useState<TouchedMap>({});
 
   const errors = validate(form);
+
+  // Sync to checkout context whenever the form becomes fully valid
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) {
+      setContactSummary({
+        firstName: form.firstName.trim(),
+        lastName:  form.lastName.trim(),
+        email:     form.email.trim(),
+        phone:     form.phone.trim(),
+      });
+    }
+  }, [form, errors, setContactSummary]);
 
   function set(field: FieldKey) {
     return (value: string) => setForm(prev => ({ ...prev, [field]: value }));

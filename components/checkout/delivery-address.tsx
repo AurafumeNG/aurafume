@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useId } from 'react';
+import { useState, useId, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle, Check, ChevronDown, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useCheckout } from './checkout-context';
 
 // ── Data ───────────────────────────────────────────────────────────────────────
 
@@ -326,16 +327,23 @@ function AddressForm({
   uid,
   initial,
   onCancel,
+  onFormChange,
 }: {
-  uid:      string;
-  initial?: AddressForm;
-  onCancel?: () => void;
+  uid:           string;
+  initial?:      AddressForm;
+  onCancel?:     () => void;
+  onFormChange?: (form: AddressForm) => void;
 }) {
-  const [form, setForm]       = useState<AddressForm>(initial ?? EMPTY_FORM);
-  const [touched, setTouched] = useState<TouchedMap>({});
+  const [form, setForm]         = useState<AddressForm>(initial ?? EMPTY_FORM);
+  const [touched, setTouched]   = useState<TouchedMap>({});
   const [saveAddr, setSaveAddr] = useState(false);
 
   const errors = validate(form);
+
+  // Bubble form upward whenever required fields are filled
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) onFormChange?.(form);
+  }, [form, errors, onFormChange]);
 
   function set(field: FieldKey) {
     return (value: string) => setForm(prev => ({ ...prev, [field]: value }));
@@ -492,6 +500,7 @@ function AddressForm({
 
 export default function DeliveryAddress() {
   const uid = useId();
+  const { setAddressSummary } = useCheckout();
 
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>(INITIAL_SAVED);
   const [selectedId, setSelectedId]         = useState<string | 'new' | null>(
@@ -500,6 +509,21 @@ export default function DeliveryAddress() {
   const [editingAddr, setEditingAddr]       = useState<SavedAddress | null>(null);
 
   const hasSaved = savedAddresses.length > 0;
+
+  // Sync the selected saved address to checkout context
+  useEffect(() => {
+    if (!selectedId || selectedId === 'new') return;
+    const addr = savedAddresses.find(a => a.id === selectedId);
+    if (addr) {
+      setAddressSummary({
+        street:  addr.street,
+        apt:     addr.apt,
+        city:    addr.city,
+        state:   addr.state,
+        country: addr.country,
+      });
+    }
+  }, [selectedId, savedAddresses, setAddressSummary]);
 
   function handleDelete(id: string) {
     setSavedAddresses(prev => prev.filter(a => a.id !== id));
@@ -574,6 +598,13 @@ export default function DeliveryAddress() {
                 setSelectedId(savedAddresses[0].id);
                 setEditingAddr(null);
               } : undefined}
+              onFormChange={addr => setAddressSummary({
+                street:  addr.street,
+                apt:     addr.apt,
+                city:    addr.city,
+                state:   addr.state,
+                country: addr.country,
+              })}
             />
           </motion.div>
         )}
