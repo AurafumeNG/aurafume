@@ -22,10 +22,15 @@ export async function POST(req: NextRequest) {
 
   if (!secret) {
     console.error('[Paystack Webhook] PAYSTACK_SECRET_KEY not set');
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Server misconfiguration' },
+      { status: 500 },
+    );
   }
 
   const expected = createHmac('sha512', secret).update(body).digest('hex');
+
+  console.log(expected, 'expected');
 
   if (signature !== expected) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
@@ -41,7 +46,12 @@ export async function POST(req: NextRequest) {
   switch (event.event) {
     case 'charge.success':
       // TODO: persist order to DB, send confirmation email
-      console.log('[Paystack] charge.success — ref:', event.data.reference, '— amount:', event.data.amount);
+      console.log(
+        '[Paystack] charge.success — ref:',
+        event.data.reference,
+        '— amount:',
+        event.data.amount,
+      );
       break;
 
     case 'transfer.success':
