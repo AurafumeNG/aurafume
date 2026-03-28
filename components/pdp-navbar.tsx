@@ -19,9 +19,15 @@ export default function PDPNavBar({
   productName,
   productUrl,
 }: PDPNavBarProps) {
-  const { cartCount } = useCart();
+  const { cartCount: _cartCount } = useCart();
+  const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  // Defer cartCount to client-only to avoid SSR/localStorage hydration mismatch
+  const cartCount = mounted ? _cartCount : 0;
   const [shareFeedback, setShareFeedback] = useState<'idle' | 'copied'>('idle');
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);

@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { motion, useAnimation } from 'motion/react';
 import { useCart } from './cart-context';
 
 export default function FloatingCartButton() {
-  const { cartCount, lastAddedAt } = useCart();
+  const { cartCount: _cartCount, lastAddedAt } = useCart();
+  const [mounted, setMounted] = useState(false);
+  const cartCount = mounted ? _cartCount : 0;
   const controls = useAnimation();
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Bounce when an item is added
   useEffect(() => {
@@ -30,7 +34,7 @@ export default function FloatingCartButton() {
     >
       <Link
         href="/cart"
-        aria-label={`Cart, ${cartCount} item${cartCount !== 1 ? 's' : ''}`}
+        aria-label={cartCount > 0 ? `Cart, ${cartCount} item${cartCount !== 1 ? 's' : ''}` : 'Cart'}
         className="relative flex items-center justify-center w-14 h-14 rounded-full bg-foreground text-background shadow-lg hover:bg-accent hover:text-accent-foreground transition-colors duration-200 active:scale-95"
       >
         <ShoppingCart size={20} strokeWidth={1.8} />

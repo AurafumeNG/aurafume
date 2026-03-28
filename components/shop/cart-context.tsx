@@ -5,9 +5,26 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useMemo,
   type ReactNode,
 } from 'react';
+
+// ── localStorage helpers (SSR-safe) ────────────────────────────────────────────
+
+function load<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persist(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -81,6 +98,7 @@ interface CartContextValue {
   updateQty:       (productId: string, size: string, qty: number) => void;
   saveForLater:    (productId: string, size: string) => void;
   moveToCart:      (productId: string, size: string) => void;
+  clearCart:       () => void;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
@@ -95,20 +113,37 @@ const CartContext = createContext<CartContextValue>({
   applyCoupon: async () => {}, removeCoupon: () => {},
   giftOptions: DEFAULT_GIFT, setGiftOptions: () => {},
   addToCart: () => {}, removeFromCart: () => {}, updateQty: () => {},
-  saveForLater: () => {}, moveToCart: () => {},
+  saveForLater: () => {}, moveToCart: () => {}, clearCart: () => {},
 });
 
 // ── Provider ───────────────────────────────────────────────────────────────────
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items,        setItems]       = useState<CartItem[]>([]);
-  const [savedItems,   setSavedItems]  = useState<CartItem[]>([]);
-  const [lastAddedAt,  setLastAddedAt] = useState(0);
+  const [items, setItems] = useState<CartItem[]>(() =>
+    load<CartItem[]>('aura:cart', []),
+  );
+  const [savedItems, setSavedItems] = useState<CartItem[]>(() =>
+    load<CartItem[]>('aura:saved', []),
+  );
+  const [lastAddedAt, setLastAddedAt] = useState(0);
 
-  const [appliedCoupon,  setAppliedCoupon]  = useState<AppliedCoupon | null>(null);
-  const [couponStatus,   setCouponStatus]   = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(() =>
+    load<AppliedCoupon | null>('aura:coupon', null),
+  );
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
+    () => (load<AppliedCoupon | null>('aura:coupon', null) ? 'success' : 'idle'),
+  );
 
-  const [giftOptions, setGiftOptionsState] = useState<GiftOptions>(DEFAULT_GIFT);
+  const [giftOptions, setGiftOptionsState] = useState<GiftOptions>(() =>
+    load<GiftOptions>('aura:gift', DEFAULT_GIFT),
+  );
+
+  // ── Persist on change ──────────────────────────────────────────────────────
+
+  useEffect(() => { persist('aura:cart',   items);         }, [items]);
+  useEffect(() => { persist('aura:saved',  savedItems);    }, [savedItems]);
+  useEffect(() => { persist('aura:coupon', appliedCoupon); }, [appliedCoupon]);
+  useEffect(() => { persist('aura:gift',   giftOptions);   }, [giftOptions]);
 
   const cartCount = useMemo(() => items.reduce((s, i) => s + i.qty, 0), [items]);
   const cartTotal = useMemo(() => items.reduce((s, i) => s + i.pricePerUnit * i.qty, 0), [items]);
@@ -214,12 +249,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setGiftOptionsState(prev => ({ ...prev, ...patch }));
   }, []);
 
+  const clearCart = useCallback(() => {
+    setItems([]);
+    setAppliedCoupon(null);
+    setCouponStatus('idle');
+    setGiftOptionsState(DEFAULT_GIFT);
+  }, []);
+
   return (
     <CartContext.Provider value={{
       items, savedItems, cartCount, cartTotal, lastAddedAt,
       appliedCoupon, couponStatus, applyCoupon, removeCoupon,
       giftOptions, setGiftOptions,
-      addToCart, removeFromCart, updateQty, saveForLater, moveToCart,
+      addToCart, removeFromCart, updateQty, saveForLater, moveToCart, clearCart,
     }}>
       {children}
     </CartContext.Provider>
