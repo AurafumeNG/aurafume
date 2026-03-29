@@ -123,10 +123,14 @@ function OrderConfirmationInner() {
     reference ?? `ORD-${Date.now().toString(36).toUpperCase().slice(-8)}`,
   );
 
-  // Prevent back navigation to checkout
+  // Replace history entry so back button goes to home, not checkout
   useEffect(() => {
-    window.history.replaceState(null, '', '/order-confirmation');
-  }, []);
+    window.history.replaceState(
+      null,
+      '',
+      reference ? `/order-confirmation?ref=${reference}` : '/order-confirmation',
+    );
+  }, [reference]);
 
   return (
     <div className="max-w-lg mx-auto px-5 sm:px-8 py-16 sm:py-24 space-y-10">
