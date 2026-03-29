@@ -15,7 +15,7 @@ interface PaystackEvent {
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-
+  console.log('[Webhook hit]');
   // Verify HMAC signature
   const signature = req.headers.get('x-paystack-signature') ?? '';
   const secret = process.env.PAYSTACK_SECRET_KEY;
