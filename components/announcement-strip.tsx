@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 
 const messages = [
   {
-    text: 'Free shipping on all orders over ₦50,000',
+    text: 'Free shipping on all orders over ₦200,000',
     cta: 'Shop Now',
     href: '/shop',
   },
@@ -22,7 +22,11 @@ const messages = [
   },
 ];
 
-export default function AnnouncementStrip({ onDismiss }: { onDismiss: () => void }) {
+export default function AnnouncementStrip({
+  onDismiss,
+}: {
+  onDismiss: () => void;
+}) {
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true); // controls fade
   const [paused, setPaused] = useState(false);
@@ -72,7 +76,9 @@ export default function AnnouncementStrip({ onDismiss }: { onDismiss: () => void
           {msg.text}
         </span>
 
-        <span className="text-[#C6A77B]/30 text-[10px] leading-none select-none">·</span>
+        <span className="text-[#C6A77B]/30 text-[10px] leading-none select-none">
+          ·
+        </span>
 
         <Link
           href={msg.href}

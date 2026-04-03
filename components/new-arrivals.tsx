@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Check } from 'lucide-react';
+import { ShoppingBag, Check, Heart } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useCart } from '@/components/shop/cart-context';
 
 // ── Types ───────────────────────────────────────────────────────────
 interface SizeOption {
@@ -62,18 +63,63 @@ const arrivals: Arrival[] = [
 
 const SECTION_LAUNCH = 'April 2026';
 
+async function toggleWishlist(
+  productId: string,
+): Promise<{ wishlisted: boolean } | null> {
+  try {
+    const res = await fetch('/api/wishlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data;
+  } catch {
+    return null;
+  }
+}
+
 // ── Arrival card ────────────────────────────────────────────────────
 function ArrivalCard({ arrival, index }: { arrival: Arrival; index: number }) {
+  const { addToCart } = useCart();
   const [selectedSize, setSelectedSize] = useState(1); // default 50ml
   const [added, setAdded] = useState(false);
+  const [wishlisted, setWishlisted] = useState(false);
+  const [wishlistPending, setWishlistPending] = useState(false);
 
   const price = arrival.sizes[selectedSize].price;
 
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     if (added) return;
+    const size = arrival.sizes[selectedSize];
+    addToCart({
+      productId:    arrival.id,
+      slug:         arrival.id,
+      name:         arrival.name,
+      scentFamily:  arrival.notes,
+      image:        arrival.image,
+      size:         size.label,
+      pricePerUnit: size.price,
+      qty:          1,
+    });
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
+  }
+
+  async function handleWishlistToggle(e: React.MouseEvent) {
+    e.preventDefault();
+    if (wishlistPending) return;
+    setWishlistPending(true);
+    setWishlisted((v) => !v);
+    const result = await toggleWishlist(arrival.id);
+    if (result === null) {
+      setWishlisted((v) => !v);
+    } else {
+      setWishlisted(result.wishlisted);
+    }
+    setWishlistPending(false);
   }
 
   return (
@@ -99,8 +145,22 @@ function ArrivalCard({ arrival, index }: { arrival: Arrival; index: number }) {
           New
         </span>
 
+        {/* Wishlist */}
+        <button
+          onClick={handleWishlistToggle}
+          aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+          disabled={wishlistPending}
+          className="absolute top-2.5 right-2.5 z-10 w-8 h-8 flex items-center justify-center bg-background/70 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-background disabled:opacity-50"
+        >
+          <Heart
+            size={14}
+            strokeWidth={1.8}
+            className={`transition-colors ${wishlisted ? 'fill-accent text-accent' : 'text-foreground/70'}`}
+          />
+        </button>
+
         {/* Descriptor overlay */}
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-foreground/60 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-linear-to-t from-foreground/60 to-transparent pointer-events-none" />
         <p className="absolute bottom-5 left-5 text-white/80 text-[0.72rem] tracking-[0.14em] italic leading-snug">
           {arrival.descriptor}
         </p>
@@ -117,9 +177,15 @@ function ArrivalCard({ arrival, index }: { arrival: Arrival; index: number }) {
             }`}
           >
             {added ? (
-              <><Check size={13} strokeWidth={2.5} />Added</>
+              <>
+                <Check size={13} strokeWidth={2.5} />
+                Added
+              </>
             ) : (
-              <><ShoppingBag size={13} />Add to Bag</>
+              <>
+                <ShoppingBag size={13} />
+                Add to Bag
+              </>
             )}
           </button>
         </div>
@@ -168,7 +234,6 @@ export default function NewArrivals() {
   return (
     <section className="bg-card py-20 md:py-28">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
-
         {/* Header */}
         <motion.div
           className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-14"
@@ -192,7 +257,8 @@ export default function NewArrivals() {
           </div>
 
           <p className="text-muted-foreground text-[0.82rem] leading-relaxed max-w-xs sm:text-right">
-            Three new additions to the AuraFume family — each one a study in restraint and precision.
+            Three new additions to the AuraFume family — each one a study in
+            restraint and precision.
           </p>
         </motion.div>
 
@@ -202,7 +268,6 @@ export default function NewArrivals() {
             <ArrivalCard key={arrival.id} arrival={arrival} index={i} />
           ))}
         </div>
-
       </div>
     </section>
   );

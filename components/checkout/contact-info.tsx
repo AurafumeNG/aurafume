@@ -75,7 +75,8 @@ interface FieldProps {
   touched:     boolean;
   inputMode?:  React.HTMLAttributes<HTMLInputElement>['inputMode'];
   autoComplete?: string;
-  prefix?:     string;            // e.g. "+234"
+  prefix?:     string;
+  disabled?:   boolean;
   onChange:    (v: string) => void;
   onBlur:      () => void;
 }
@@ -83,7 +84,7 @@ interface FieldProps {
 function Field({
   id, label, type = 'text', value, placeholder,
   error, touched, inputMode, autoComplete, prefix,
-  onChange, onBlur,
+  disabled, onChange, onBlur,
 }: FieldProps) {
   const hasError = touched && !!error;
 
@@ -97,11 +98,12 @@ function Field({
       </label>
 
       <div className={`relative flex items-center border transition-colors duration-200 ${
-        hasError
-          ? 'border-destructive'
-          : 'border-border focus-within:border-foreground/50'
+        disabled
+          ? 'border-border bg-muted/30'
+          : hasError
+            ? 'border-destructive'
+            : 'border-border focus-within:border-foreground/50'
       }`}>
-        {/* Prefix slot (country code etc.) */}
         {prefix && (
           <span className="shrink-0 px-3 h-12 flex items-center text-[0.82rem] text-muted-foreground border-r border-border select-none">
             {prefix}
@@ -115,11 +117,12 @@ function Field({
           placeholder={placeholder}
           inputMode={inputMode}
           autoComplete={autoComplete}
+          disabled={disabled}
           onChange={e => onChange(e.target.value)}
           onBlur={onBlur}
           aria-invalid={hasError}
           aria-describedby={hasError ? `${id}-error` : undefined}
-          className="w-full h-12 px-3 bg-transparent text-[0.88rem] text-foreground placeholder:text-muted-foreground/40 outline-none"
+          className="w-full h-12 px-3 bg-transparent text-[0.88rem] text-foreground placeholder:text-muted-foreground/40 outline-none disabled:text-muted-foreground disabled:cursor-default"
         />
       </div>
 
@@ -147,9 +150,27 @@ export default function ContactInfo() {
     phone:     '',
   });
 
-  const [touched, setTouched] = useState<TouchedMap>({});
+  const [touched,    setTouched]    = useState<TouchedMap>({});
+  const [authUser,   setAuthUser]   = useState<{ firstName: string; lastName: string; email: string; phone?: string } | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
 
-  const errors = validate(form);
+  // ── Detect logged-in user ──────────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((res: { data?: { firstName: string; lastName: string; email: string; phone?: string } } | null) => {
+        if (res?.data) {
+          const { firstName, lastName, email, phone } = res.data;
+          setAuthUser({ firstName, lastName, email, phone });
+          setForm({ firstName, lastName, email, phone: phone ?? '' });
+        }
+      })
+      .catch(() => { /* not logged in */ })
+      .finally(() => setAuthLoaded(true));
+  }, []);
+
+  const isLoggedIn = !!authUser;
+  const errors     = validate(form);
 
   // Sync to checkout context whenever the form becomes fully valid
   useEffect(() => {
@@ -171,20 +192,59 @@ export default function ContactInfo() {
     return () => setTouched(prev => ({ ...prev, [field]: true }));
   }
 
+  // Don't render until we know auth status (avoid layout shift)
+  if (!authLoaded) {
+    return (
+      <section>
+        <div className="h-4 w-40 bg-muted/40 rounded animate-pulse mb-5" />
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-12 bg-muted/30 rounded animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section>
 
-      {/* ── Already have an account? ── */}
-      <p className="text-[0.7rem] text-muted-foreground mb-5">
-        Already have an account?{' '}
-        <Link
-          href="/login"
-          className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
+      {/* ── Auth status banner ── */}
+      {isLoggedIn ? (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
+          className="flex items-center gap-2 mb-5 px-3 py-2 bg-foreground/3 border border-border/60"
         >
-          Log in
-        </Link>
-        {' '}to check out faster.
-      </p>
+          <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+          <p className="text-[0.65rem] tracking-[0.04em] text-muted-foreground">
+            Checking out as{' '}
+            <span className="text-foreground font-medium">
+              {authUser.firstName} {authUser.lastName}
+            </span>
+            {' '}·{' '}
+            <Link
+              href="/api/auth/logout"
+              prefetch={false}
+              className="underline underline-offset-2 hover:text-accent transition-colors"
+            >
+              Sign out
+            </Link>
+          </p>
+        </motion.div>
+      ) : (
+        <p className="text-[0.7rem] text-muted-foreground mb-5">
+          Already have an account?{' '}
+          <Link
+            href="/login"
+            className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
+          >
+            Log in
+          </Link>
+          {' '}to check out faster.
+        </p>
+      )}
 
       {/* ── Section heading ── */}
       <h2 className="text-[0.62rem] tracking-[0.32em] uppercase text-muted-foreground mb-4">
@@ -194,7 +254,6 @@ export default function ContactInfo() {
       {/* ── Fields ── */}
       <div className="space-y-4">
 
-        {/* First + Last name — side by side on sm+, stacked on mobile */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field
             id={`${uid}-first`}
@@ -202,8 +261,9 @@ export default function ContactInfo() {
             value={form.firstName}
             placeholder="Ada"
             autoComplete="given-name"
+            disabled={isLoggedIn}
             error={errors.firstName}
-            touched={!!touched.firstName}
+            touched={isLoggedIn || !!touched.firstName}
             onChange={set('firstName')}
             onBlur={touch('firstName')}
           />
@@ -213,14 +273,14 @@ export default function ContactInfo() {
             value={form.lastName}
             placeholder="Okonkwo"
             autoComplete="family-name"
+            disabled={isLoggedIn}
             error={errors.lastName}
-            touched={!!touched.lastName}
+            touched={isLoggedIn || !!touched.lastName}
             onChange={set('lastName')}
             onBlur={touch('lastName')}
           />
         </div>
 
-        {/* Email */}
         <Field
           id={`${uid}-email`}
           label="Email Address"
@@ -229,13 +289,13 @@ export default function ContactInfo() {
           placeholder="ada@example.com"
           autoComplete="email"
           inputMode="email"
+          disabled={isLoggedIn}
           error={errors.email}
-          touched={!!touched.email}
+          touched={isLoggedIn || !!touched.email}
           onChange={set('email')}
           onBlur={touch('email')}
         />
 
-        {/* Phone */}
         <Field
           id={`${uid}-phone`}
           label="Phone Number"
@@ -246,16 +306,18 @@ export default function ContactInfo() {
           inputMode="tel"
           prefix="+234"
           error={errors.phone}
-          touched={!!touched.phone}
+          touched={isLoggedIn || !!touched.phone}
           onChange={set('phone')}
           onBlur={touch('phone')}
         />
 
-        {/* Guest checkout notice */}
-        <p className="text-[0.62rem] tracking-[0.04em] text-muted-foreground/70 leading-relaxed pt-1">
-          Checking out as a guest — your order confirmation will be sent to the email above.
-          No account required.
-        </p>
+        {/* Footer note */}
+        {!isLoggedIn && (
+          <p className="text-[0.62rem] tracking-[0.04em] text-muted-foreground/70 leading-relaxed pt-1">
+            Checking out as a guest — your order confirmation will be sent to the email above.
+            No account required.
+          </p>
+        )}
 
       </div>
     </section>

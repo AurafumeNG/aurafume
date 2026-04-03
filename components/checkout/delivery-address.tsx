@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useId, useEffect } from 'react';
+import { useState, useId, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle, Check, ChevronDown, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCheckout } from './checkout-context';
@@ -39,25 +39,22 @@ type ErrorMap   = Partial<Record<FieldKey, string>>;
 
 interface SavedAddress extends AddressForm {
   id:    string;
-  label: string;   // 'Home', 'Office', etc.
+  label: string;
 }
 
-// ── Mock saved addresses (swap for API data when auth is ready) ────────────────
+// ── API address shape (from /api/addresses) ────────────────────────────────────
 
-const INITIAL_SAVED: SavedAddress[] = [
-  {
-    id: 'addr-1', label: 'Home',
-    street: '14 Banana Island Road', apt: 'Flat 3B',
-    city: 'Lagos', state: 'Lagos', lga: 'Eti-Osa',
-    postalCode: '101233', country: 'Nigeria',
-  },
-  {
-    id: 'addr-2', label: 'Office',
-    street: '5 Adeola Odeku Street', apt: '',
-    city: 'Lagos', state: 'Lagos', lga: 'Victoria Island',
-    postalCode: '101241', country: 'Nigeria',
-  },
-];
+interface ApiAddress {
+  _id:        string;
+  label:      string;
+  street:     string;
+  apt?:       string;
+  city:       string;
+  state:      string;
+  postalCode: string;
+  country:    string;
+  isDefault:  boolean;
+}
 
 const EMPTY_FORM: AddressForm = {
   street: '', apt: '', city: '', state: '', lga: '', postalCode: '', country: 'Nigeria',
@@ -261,7 +258,7 @@ function AddressCard({
       onKeyDown={e => e.key === 'Enter' && onSelect()}
       className={`relative cursor-pointer border p-4 transition-colors duration-200 ${
         selected
-          ? 'border-foreground bg-foreground/[0.03]'
+          ? 'border-foreground bg-foreground/3'
           : 'border-border hover:border-foreground/30'
       }`}
     >
@@ -323,16 +320,18 @@ function AddressCard({
 
 // ── New / edit address form ────────────────────────────────────────────────────
 
-function AddressForm({
+function AddressFormFields({
   uid,
   initial,
   onCancel,
   onFormChange,
+  showSaveCheckbox,
 }: {
-  uid:           string;
-  initial?:      AddressForm;
-  onCancel?:     () => void;
-  onFormChange?: (form: AddressForm) => void;
+  uid:              string;
+  initial?:         AddressForm;
+  onCancel?:        () => void;
+  onFormChange?:    (form: AddressForm) => void;
+  showSaveCheckbox: boolean;
 }) {
   const [form, setForm]         = useState<AddressForm>(initial ?? EMPTY_FORM);
   const [touched, setTouched]   = useState<TouchedMap>({});
@@ -340,7 +339,6 @@ function AddressForm({
 
   const errors = validate(form);
 
-  // Bubble form upward whenever required fields are filled
   useEffect(() => {
     if (Object.keys(errors).length === 0) onFormChange?.(form);
   }, [form, errors, onFormChange]);
@@ -352,7 +350,6 @@ function AddressForm({
     return () => setTouched(prev => ({ ...prev, [field]: true }));
   }
 
-  // When country changes away from Nigeria, clear state selection
   function handleCountryChange(v: string) {
     setForm(prev => ({ ...prev, country: v, state: v === 'Nigeria' ? prev.state : '' }));
   }
@@ -361,8 +358,6 @@ function AddressForm({
 
   return (
     <div className="space-y-4">
-
-      {/* Street address */}
       <InputField
         id={`${uid}-street`}
         label="Street Address"
@@ -375,7 +370,6 @@ function AddressForm({
         onBlur={touch('street')}
       />
 
-      {/* Apt / Suite / Floor */}
       <InputField
         id={`${uid}-apt`}
         label="Apartment / Suite / Floor"
@@ -389,7 +383,6 @@ function AddressForm({
         onBlur={touch('apt')}
       />
 
-      {/* City + State */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <InputField
           id={`${uid}-city`}
@@ -430,7 +423,6 @@ function AddressForm({
         )}
       </div>
 
-      {/* LGA + Postal code */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <InputField
           id={`${uid}-lga`}
@@ -459,7 +451,6 @@ function AddressForm({
         />
       </div>
 
-      {/* Country */}
       <SelectField
         id={`${uid}-country`}
         label="Country"
@@ -472,17 +463,17 @@ function AddressForm({
         onBlur={touch('country')}
       />
 
-      {/* Save address */}
-      <div className="pt-1">
-        <Checkbox
-          id={`${uid}-save`}
-          label="Save this address for future orders"
-          checked={saveAddr}
-          onChange={setSaveAddr}
-        />
-      </div>
+      {showSaveCheckbox && (
+        <div className="pt-1">
+          <Checkbox
+            id={`${uid}-save`}
+            label="Save this address for future orders"
+            checked={saveAddr}
+            onChange={setSaveAddr}
+          />
+        </div>
+      )}
 
-      {/* Cancel (only when editing a saved address) */}
       {onCancel && (
         <button
           type="button"
@@ -496,21 +487,73 @@ function AddressForm({
   );
 }
 
+// ── Skeleton loader ────────────────────────────────────────────────────────────
+
+function AddressSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[1, 2].map(i => (
+        <div key={i} className="h-24 border border-border/40 animate-pulse bg-muted/20" />
+      ))}
+    </div>
+  );
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export default function DeliveryAddress() {
   const uid = useId();
   const { setAddressSummary } = useCheckout();
 
-  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>(INITIAL_SAVED);
-  const [selectedId, setSelectedId]         = useState<string | 'new' | null>(
-    INITIAL_SAVED.length > 0 ? INITIAL_SAVED[0].id : 'new',
-  );
-  const [editingAddr, setEditingAddr]       = useState<SavedAddress | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedId,     setSelectedId]     = useState<string | 'new' | null>(null);
+  const [editingAddr,    setEditingAddr]     = useState<SavedAddress | null>(null);
+  const [loading,        setLoading]         = useState(true);
+
+  // ── Fetch user addresses on mount ──────────────────────────────────────────
+  const fetchAddresses = useCallback(async () => {
+    try {
+      const res = await fetch('/api/addresses', { credentials: 'include' });
+      if (!res.ok) {
+        // Not authenticated — guest checkout, show empty form
+        setSelectedId('new');
+        setLoading(false);
+        return;
+      }
+      const data = await res.json() as { data?: ApiAddress[] };
+      const addresses: SavedAddress[] = (data.data ?? []).map(a => ({
+        id:         a._id,
+        label:      a.label,
+        street:     a.street,
+        apt:        a.apt ?? '',
+        city:       a.city,
+        state:      a.state,
+        lga:        '',
+        postalCode: a.postalCode,
+        country:    a.country,
+      }));
+      setSavedAddresses(addresses);
+      // Pre-select the default address (isDefault first, fallback to first)
+      if (addresses.length > 0) {
+        // API already returns addresses; isDefault is on the ApiAddress, not SavedAddress.
+        // Re-check from raw data to find the default.
+        const rawDefault = (data.data ?? []).find(a => a.isDefault);
+        setSelectedId(rawDefault ? rawDefault._id : addresses[0].id);
+      } else {
+        setSelectedId('new');
+      }
+    } catch {
+      setSelectedId('new');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAddresses(); }, [fetchAddresses]);
 
   const hasSaved = savedAddresses.length > 0;
 
-  // Sync the selected saved address to checkout context
+  // ── Sync the selected saved address to checkout context ───────────────────
   useEffect(() => {
     if (!selectedId || selectedId === 'new') return;
     const addr = savedAddresses.find(a => a.id === selectedId);
@@ -526,6 +569,8 @@ export default function DeliveryAddress() {
   }, [selectedId, savedAddresses, setAddressSummary]);
 
   function handleDelete(id: string) {
+    // Optimistic removal (the account address-sheet handles real API delete; here
+    // we just remove from the local list so the user can pick another address)
     setSavedAddresses(prev => prev.filter(a => a.id !== id));
     if (selectedId === id) {
       const remaining = savedAddresses.filter(a => a.id !== id);
@@ -535,7 +580,7 @@ export default function DeliveryAddress() {
 
   function handleEdit(addr: SavedAddress) {
     setEditingAddr(addr);
-    setSelectedId('new'); // expand form with pre-filled data
+    setSelectedId('new');
   }
 
   return (
@@ -548,8 +593,11 @@ export default function DeliveryAddress() {
         </h2>
       </div>
 
+      {/* Loading state */}
+      {loading && <AddressSkeleton />}
+
       {/* Saved address cards */}
-      {hasSaved && (
+      {!loading && hasSaved && (
         <div className="space-y-3 mb-4" role="radiogroup" aria-label="Saved addresses">
           <AnimatePresence initial={false}>
             {savedAddresses.map(addr => (
@@ -580,35 +628,38 @@ export default function DeliveryAddress() {
         </div>
       )}
 
-      {/* New / edit address form — shown when "new" is selected or no saved addresses */}
-      <AnimatePresence initial={false}>
-        {(selectedId === 'new' || !hasSaved) && (
-          <motion.div
-            key="address-form"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
-            className="overflow-hidden"
-          >
-            <AddressForm
-              uid={uid}
-              initial={editingAddr ?? undefined}
-              onCancel={hasSaved ? () => {
-                setSelectedId(savedAddresses[0].id);
-                setEditingAddr(null);
-              } : undefined}
-              onFormChange={addr => setAddressSummary({
-                street:  addr.street,
-                apt:     addr.apt,
-                city:    addr.city,
-                state:   addr.state,
-                country: addr.country,
-              })}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* New / edit address form */}
+      {!loading && (
+        <AnimatePresence initial={false}>
+          {(selectedId === 'new' || !hasSaved) && (
+            <motion.div
+              key="address-form"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+              className="overflow-hidden"
+            >
+              <AddressFormFields
+                uid={uid}
+                initial={editingAddr ?? undefined}
+                showSaveCheckbox={!editingAddr}
+                onCancel={hasSaved ? () => {
+                  setSelectedId(savedAddresses[0].id);
+                  setEditingAddr(null);
+                } : undefined}
+                onFormChange={addr => setAddressSummary({
+                  street:  addr.street,
+                  apt:     addr.apt,
+                  city:    addr.city,
+                  state:   addr.state,
+                  country: addr.country,
+                })}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </section>
   );
 }

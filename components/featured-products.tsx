@@ -14,6 +14,7 @@ const products: Product[] = [
     image: '/images/image5.jpeg',
     badge: 'Best Seller',
     href: '/shop/loving-you-frozen',
+    sizes: ['30ml', '50ml', '100ml'],
   },
   {
     id: 'stronger-for-you-intense',
@@ -22,6 +23,7 @@ const products: Product[] = [
     price: 175000,
     image: '/images/image3.jpeg',
     href: '/shop/stronger-for-you-intense',
+    sizes: ['50ml', '100ml'],
   },
   {
     id: 'stronger-for-you-absolute',
@@ -31,6 +33,7 @@ const products: Product[] = [
     image: '/images/image11.jpeg',
     badge: 'New',
     href: '/shop/stronger-for-you-absolute',
+    sizes: ['50ml', '100ml'],
   },
   {
     id: 'suger-edp',
@@ -39,6 +42,7 @@ const products: Product[] = [
     price: 139500,
     image: '/images/image1.jpeg',
     href: '/shop/suger-edp',
+    sizes: ['30ml', '50ml'],
   },
 ];
 

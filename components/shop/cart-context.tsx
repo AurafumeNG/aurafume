@@ -56,25 +56,7 @@ export interface GiftOptions {
 
 export const GIFT_WRAP_FEE = 2_500; // ₦2,500
 
-// ── Mock coupon table ──────────────────────────────────────────────────────────
-// Replace with a real API call when the backend is ready.
-
-interface CouponDef {
-  type: 'pct' | 'flat';
-  value: number;       // % or flat ₦
-  label: string;
-}
-
-const VALID_COUPONS: Record<string, CouponDef> = {
-  AURA10:    { type: 'pct',  value: 10,    label: '10% off'        },
-  WELCOME15: { type: 'pct',  value: 15,    label: '15% off'        },
-  FIRST5K:   { type: 'flat', value: 5_000, label: '₦5,000 off'     },
-};
-
-function computeDiscount(def: CouponDef, total: number): number {
-  if (def.type === 'pct')  return Math.round(total * def.value / 100);
-  return Math.min(def.value, total); // flat — never exceed total
-}
+// (Coupon validation is now handled server-side via POST /api/coupons/validate)
 
 // ── Context shape ──────────────────────────────────────────────────────────────
 
@@ -119,24 +101,23 @@ const CartContext = createContext<CartContextValue>({
 // ── Provider ───────────────────────────────────────────────────────────────────
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(() =>
-    load<CartItem[]>('aura:cart', []),
-  );
-  const [savedItems, setSavedItems] = useState<CartItem[]>(() =>
-    load<CartItem[]>('aura:saved', []),
-  );
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [savedItems, setSavedItems] = useState<CartItem[]>([]);
   const [lastAddedAt, setLastAddedAt] = useState(0);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [giftOptions, setGiftOptionsState] = useState<GiftOptions>(DEFAULT_GIFT);
 
-  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(() =>
-    load<AppliedCoupon | null>('aura:coupon', null),
-  );
-  const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
-    () => (load<AppliedCoupon | null>('aura:coupon', null) ? 'success' : 'idle'),
-  );
+  // ── Hydrate from localStorage after mount (avoids SSR/client mismatch) ────────
 
-  const [giftOptions, setGiftOptionsState] = useState<GiftOptions>(() =>
-    load<GiftOptions>('aura:gift', DEFAULT_GIFT),
-  );
+  useEffect(() => {
+    setItems(load<CartItem[]>('aura:cart', []));
+    setSavedItems(load<CartItem[]>('aura:saved', []));
+    const coupon = load<AppliedCoupon | null>('aura:coupon', null);
+    setAppliedCoupon(coupon);
+    setCouponStatus(coupon ? 'success' : 'idle');
+    setGiftOptionsState(load<GiftOptions>('aura:gift', DEFAULT_GIFT));
+  }, []);
 
   // ── Persist on change ──────────────────────────────────────────────────────
 
@@ -216,26 +197,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const applyCoupon = useCallback(async (code: string) => {
     setCouponStatus('loading');
-    // Simulate network latency
-    await new Promise(r => setTimeout(r, 800));
 
-    const def = VALID_COUPONS[code.trim().toUpperCase()];
-    if (!def) {
+    // Snapshot current cart total to send to API
+    let currentTotal = 0;
+    setItems(current => {
+      currentTotal = current.reduce((s, i) => s + i.pricePerUnit * i.qty, 0);
+      return current;
+    });
+
+    try {
+      const res  = await fetch('/api/coupons/validate', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: code.trim(), cartTotal: currentTotal }),
+      });
+      const data = await res.json() as {
+        valid:     boolean;
+        code?:     string;
+        label?:    string;
+        discount?: number;
+        reason?:   string;
+      };
+
+      if (!data.valid) {
+        setCouponStatus('error');
+        setAppliedCoupon(null);
+        return;
+      }
+
+      setAppliedCoupon({
+        code:           data.code!,
+        label:          data.label!,
+        discountAmount: data.discount!,
+      });
+      setCouponStatus('success');
+    } catch {
       setCouponStatus('error');
       setAppliedCoupon(null);
-      return;
     }
-    // Snapshot cartTotal at the moment of application
-    setItems(current => {
-      const total = current.reduce((s, i) => s + i.pricePerUnit * i.qty, 0);
-      setAppliedCoupon({
-        code: code.trim().toUpperCase(),
-        label: def.label,
-        discountAmount: computeDiscount(def, total),
-      });
-      return current; // no change to items
-    });
-    setCouponStatus('success');
   }, []);
 
   const removeCoupon = useCallback(() => {

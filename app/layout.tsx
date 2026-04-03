@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, Inter } from 'next/font/google';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
 import { CartProvider } from '@/components/shop/cart-context';
+import { AuthProvider } from '@/components/auth/auth-context';
 import './globals.css';
 
 const playfair = Playfair_Display({
@@ -50,10 +51,12 @@ export default function RootLayout({
       className={`${playfair.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <CartProvider>
-          {children}
-          <PWAInstallPrompt />
-        </CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            {children}
+            <PWAInstallPrompt />
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -6,6 +6,21 @@ import Link from 'next/link';
 import { Heart, ShoppingBag } from 'lucide-react';
 import type { ShopProduct, ViewMode } from './types';
 
+async function toggleWishlist(productId: string): Promise<{ wishlisted: boolean } | null> {
+  try {
+    const res = await fetch('/api/wishlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data;
+  } catch {
+    return null;
+  }
+}
+
 // ── Badge ────────────────────────────────────────────────────────────
 const BADGE_STYLES: Record<string, string> = {
   'New':         'bg-accent text-accent-foreground',
@@ -18,12 +33,28 @@ export default function ShopProductCard({
   product,
   viewMode = 'grid',
   onQuickAdd,
+  initialWishlisted = false,
 }: {
   product: ShopProduct;
   viewMode: ViewMode;
   onQuickAdd: (product: ShopProduct) => void;
+  initialWishlisted?: boolean;
 }) {
-  const [wishlisted, setWishlisted] = useState(false);
+  const [wishlisted, setWishlisted] = useState(initialWishlisted);
+  const [pending, setPending] = useState(false);
+
+  async function handleWishlistToggle() {
+    if (pending) return;
+    setPending(true);
+    setWishlisted(v => !v); // optimistic
+    const result = await toggleWishlist(product.id);
+    if (result === null) {
+      setWishlisted(v => !v); // revert on error
+    } else {
+      setWishlisted(result.wishlisted);
+    }
+    setPending(false);
+  }
 
   // ── LIST layout ──────────────────────────────────────────────────
   if (viewMode === 'list') {
@@ -66,9 +97,10 @@ export default function ShopProductCard({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setWishlisted(v => !v)}
+                onClick={handleWishlistToggle}
                 aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-                className="w-8 h-8 flex items-center justify-center text-foreground/40 hover:text-foreground transition-colors"
+                disabled={pending}
+                className="w-8 h-8 flex items-center justify-center text-foreground/40 hover:text-foreground transition-colors disabled:opacity-50"
               >
                 <Heart
                   size={15}
@@ -111,9 +143,10 @@ export default function ShopProductCard({
 
         {/* Wishlist */}
         <button
-          onClick={e => { e.preventDefault(); setWishlisted(v => !v); }}
+          onClick={e => { e.preventDefault(); handleWishlistToggle(); }}
           aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-          className="absolute top-2.5 right-2.5 z-10 w-8 h-8 flex items-center justify-center bg-background/70 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-background"
+          disabled={pending}
+          className="absolute top-2.5 right-2.5 z-10 w-8 h-8 flex items-center justify-center bg-background/70 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-background disabled:opacity-50"
         >
           <Heart
             size={14}

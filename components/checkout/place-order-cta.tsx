@@ -13,8 +13,6 @@ const GOLD_DISABLED =
   'linear-gradient(135deg, oklch(0.80 0.05 75) 0%, oklch(0.82 0.04 77) 100%)';
 
 // ── Paystack V2 Inline JS loader ────────────────────────────────────────────────
-// V1 used `callback` (not `onSuccess`) + setup()/openIframe().
-// V2 uses `new PaystackPop()` + newTransaction() with `onSuccess`/`onCancel`.
 
 function loadPaystackScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -62,6 +60,38 @@ interface PaystackWindow extends Window {
   PaystackPop?: new () => { newTransaction: (config: PaystackConfig) => void };
 }
 
+// ── Order creation payload ──────────────────────────────────────────────────────
+
+interface CreateOrderPayload {
+  contact:         { firstName: string; lastName: string; email: string; phone: string };
+  shippingAddress: { street: string; apt: string; city: string; state: string; country: string };
+  items:           Array<{
+    productId: string; slug: string; name: string; scentFamily: string;
+    image: string; size: string; pricePerUnit: number; qty: number;
+  }>;
+  gift:            { isGift: boolean; message: string; wrapping: boolean; hidePrice: boolean };
+  delivery:        { option: string; label: string; duration: string; notes?: string };
+  payment:         { method: 'bank-transfer' | 'paystack'; paystackRef?: string };
+  couponCode?:     string;
+  cartTotal:       number;
+  deliveryFee:     number;
+  giftWrapFee:     number;
+}
+
+async function createOrder(payload: CreateOrderPayload): Promise<{ orderId: string; orderNumber: string }> {
+  const res = await fetch('/api/orders', {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify(payload),
+  });
+  const data = await res.json() as { orderId?: string; orderNumber?: string; error?: string };
+  if (!res.ok || !data.orderId) {
+    throw new Error(data.error ?? 'Failed to create order.');
+  }
+  return { orderId: data.orderId, orderNumber: data.orderNumber! };
+}
+
 // ── Shimmer overlay ─────────────────────────────────────────────────────────────
 
 function Shimmer() {
@@ -93,12 +123,12 @@ export default function PlaceOrderCta() {
     }
   }, [paymentMethod?.id]);
 
-  // ── Derived total ────────────────────────────────────────────────────────────
+  // ── Derived totals ────────────────────────────────────────────────────────────
   const discount   = appliedCoupon?.discountAmount ?? 0;
   const wrapFee    = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
   const finalTotal = cartTotal - discount + deliveryFee + wrapFee;
 
-  // ── Readiness ────────────────────────────────────────────────────────────────
+  // ── Readiness ─────────────────────────────────────────────────────────────────
   const isReady =
     items.length > 0  &&
     !!contactSummary  &&
@@ -108,7 +138,56 @@ export default function PlaceOrderCta() {
 
   const isDisabled = !isReady || isProcessing;
 
-  // ── Paystack flow ────────────────────────────────────────────────────────────
+  // ── Build the shared order payload ───────────────────────────────────────────
+
+  function buildPayload(paystackRef?: string): CreateOrderPayload {
+    return {
+      contact: {
+        firstName: contactSummary?.firstName ?? '',
+        lastName:  contactSummary?.lastName  ?? '',
+        email:     contactSummary?.email     ?? '',
+        phone:     contactSummary?.phone     ?? '',
+      },
+      shippingAddress: {
+        street:  addressSummary?.street  ?? '',
+        apt:     addressSummary?.apt     ?? '',
+        city:    addressSummary?.city    ?? '',
+        state:   addressSummary?.state   ?? '',
+        country: addressSummary?.country ?? '',
+      },
+      items: items.map(i => ({
+        productId:    i.productId,
+        slug:         i.slug,
+        name:         i.name,
+        scentFamily:  i.scentFamily,
+        image:        i.image,
+        size:         i.size,
+        pricePerUnit: i.pricePerUnit,
+        qty:          i.qty,
+      })),
+      gift: {
+        isGift:    giftOptions.isGift,
+        message:   giftOptions.message,
+        wrapping:  giftOptions.wrapping,
+        hidePrice: giftOptions.hidePrice,
+      },
+      delivery: {
+        option:   deliveryOption?.id ?? '',
+        label:    deliveryOption?.label ?? '',
+        duration: deliveryOption?.duration ?? '',
+      },
+      payment: {
+        method:      paymentMethod?.id ?? 'bank-transfer',
+        paystackRef,
+      },
+      couponCode:  appliedCoupon?.code,
+      cartTotal,
+      deliveryFee,
+      giftWrapFee: wrapFee,
+    };
+  }
+
+  // ── Paystack flow ─────────────────────────────────────────────────────────────
 
   async function handlePaystack() {
     try {
@@ -130,34 +209,46 @@ export default function PlaceOrderCta() {
       return;
     }
 
+    // Generate reference first so we can store it with the order
     const reference = `aura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    // Create the order in DB before opening the payment modal
+    setIsProcessing(true);
+    let orderId: string;
+    try {
+      ({ orderId } = await createOrder(buildPayload(reference)));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create order. Please try again.');
+      setIsProcessing(false);
+      return;
+    }
+    setIsProcessing(false);
 
     const paystack = new PaystackPop();
     paystack.newTransaction({
       key:      publicKey,
-      email:    contactSummary!.email,
-      amount:   finalTotal * 100,   // Paystack expects kobo
+      email:    contactSummary?.email ?? '',
+      amount:   finalTotal * 100,   // kobo
       ref:      reference,
       currency: 'NGN',
-      label:    `${contactSummary!.firstName} ${contactSummary!.lastName}`,
+      label:    `${contactSummary?.firstName ?? ''} ${contactSummary?.lastName ?? ''}`,
       metadata: {
+        orderId,
         custom_fields: [
-          { display_name: 'Customer',  variable_name: 'customer',  value: `${contactSummary!.firstName} ${contactSummary!.lastName}` },
-          { display_name: 'Phone',     variable_name: 'phone',     value: contactSummary!.phone },
-          { display_name: 'Address',   variable_name: 'address',   value: `${addressSummary!.street}, ${addressSummary!.city}, ${addressSummary!.state}` },
-          { display_name: 'Delivery',  variable_name: 'delivery',  value: deliveryOption!.label },
+          { display_name: 'Customer',  variable_name: 'customer',  value: `${contactSummary?.firstName ?? ''} ${contactSummary?.lastName ?? ''}` },
+          { display_name: 'Phone',     variable_name: 'phone',     value: contactSummary?.phone     ?? '' },
+          { display_name: 'Address',   variable_name: 'address',   value: `${addressSummary?.street ?? ''}, ${addressSummary?.city ?? ''}, ${addressSummary?.state ?? ''}` },
+          { display_name: 'Delivery',  variable_name: 'delivery',  value: deliveryOption?.label     ?? '' },
         ],
       },
 
       onSuccess: (transaction: PaystackTransaction) => {
-        // Paystack's onSuccess is the authoritative client-side signal —
-        // redirect immediately. Backend verification happens via the webhook.
         clearCart();
-        router.push(`/order-confirmation?ref=${transaction.reference}`);
+        router.push(`/order-confirmation?orderId=${orderId}&ref=${transaction.reference}`);
       },
 
       onCancel: () => {
-        // User dismissed popup — no error state, just remain on checkout
+        // User dismissed — order stays in DB as 'pending', no error shown
       },
 
       onError: (error: { message: string }) => {
@@ -166,23 +257,27 @@ export default function PlaceOrderCta() {
     });
   }
 
-  // ── Bank transfer flow ───────────────────────────────────────────────────────
+  // ── Bank transfer flow ────────────────────────────────────────────────────────
 
   async function handleBankTransfer() {
     setIsProcessing(true);
     setErrorMsg(null);
-    // Simulate order creation (swap for real API call)
-    await new Promise(r => setTimeout(r, 900));
-    clearCart();
-    router.push('/order-confirmation?method=bank-transfer');
+    try {
+      const { orderId } = await createOrder(buildPayload());
+      clearCart();
+      router.push(`/order-confirmation?orderId=${orderId}&method=bank-transfer`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to place order. Please try again.');
+      setIsProcessing(false);
+    }
   }
 
-  // ── Dispatcher ───────────────────────────────────────────────────────────────
+  // ── Dispatcher ────────────────────────────────────────────────────────────────
 
   async function handlePlaceOrder() {
     if (isDisabled) return;
     setErrorMsg(null);
-    if (paymentMethod!.id === 'paystack') {
+    if (paymentMethod?.id === 'paystack') {
       await handlePaystack();
     } else {
       await handleBankTransfer();
@@ -207,7 +302,7 @@ export default function PlaceOrderCta() {
         )}
       </AnimatePresence>
 
-      {/* Error message (post-payment failure) */}
+      {/* Error message */}
       <AnimatePresence>
         {errorMsg && (
           <motion.div
@@ -242,10 +337,8 @@ export default function PlaceOrderCta() {
             : 'none',
         }}
       >
-        {/* Shimmer — only when button is active and not loading */}
         {!isDisabled && !isProcessing && <Shimmer />}
 
-        {/* Button content */}
         <AnimatePresence mode="wait" initial={false}>
           {isProcessing ? (
             <motion.span

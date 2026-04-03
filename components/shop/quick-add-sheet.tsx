@@ -6,10 +6,20 @@ import Link from 'next/link';
 import { X, Minus, Plus, Check, ShoppingBag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCart } from './cart-context';
-import type { ShopProduct } from './types';
+
+// Minimal product shape the sheet needs — ShopProduct satisfies this automatically.
+export interface QuickAddProduct {
+  id: string;
+  name: string;
+  scentFamily: string;
+  image: string;
+  href: string;
+  price: number;
+  sizes: string[];
+}
 
 interface QuickAddSheetProps {
-  product: ShopProduct | null;
+  product: QuickAddProduct | null;
   isOpen: boolean;
   onClose: () => void;
 }

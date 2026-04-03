@@ -15,6 +15,7 @@ interface ProductGridProps {
   onLoadMore: () => void;
   onQuickAdd: (product: ShopProduct) => void;
   onClearFilters: () => void;
+  wishlistedIds?: Set<string>;
 }
 
 const SKELETON_COUNT = 4;
@@ -27,6 +28,7 @@ export default function ProductGrid({
   onLoadMore,
   onQuickAdd,
   onClearFilters,
+  wishlistedIds,
 }: ProductGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +74,7 @@ export default function ProductGrid({
                 product={product}
                 viewMode={viewMode}
                 onQuickAdd={onQuickAdd}
+                initialWishlisted={wishlistedIds?.has(product.id) ?? false}
               />
             </motion.div>
           ))}

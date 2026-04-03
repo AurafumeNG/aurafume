@@ -226,6 +226,18 @@ export default function ShopPage() {
   const [sheetProduct, setSheetProduct] = useState<ShopProduct | null>(null);
   const [sheetOpen,    setSheetOpen]    = useState(false);
 
+  // Wishlist
+  const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch('/api/wishlist')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json?.data) setWishlistedIds(new Set(json.data as string[]));
+      })
+      .catch(() => {});
+  }, []);
+
   // Reset to page 1 whenever filter/search/sort changes
   useEffect(() => { setPageCount(1); }, [query, filters, sortBy]);
 
@@ -331,6 +343,7 @@ export default function ShopPage() {
           onLoadMore={handleLoadMore}
           onQuickAdd={handleQuickAdd}
           onClearFilters={clearFilters}
+          wishlistedIds={wishlistedIds}
         />
       </div>
 
