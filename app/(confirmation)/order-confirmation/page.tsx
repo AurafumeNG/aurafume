@@ -4,8 +4,16 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { CheckCircle2, Clock, Copy, Check, ArrowRight, Package } from 'lucide-react';
+import {
+  CheckCircle2,
+  Clock,
+  Copy,
+  Check,
+  ArrowRight,
+  Package,
+} from 'lucide-react';
 import type { IOrder } from '@/models/Order';
+import Image from 'next/image';
 
 // ── Gold gradient ───────────────────────────────────────────────────────────────
 const GOLD_GRADIENT =
@@ -20,7 +28,12 @@ function SuccessRing() {
         className="absolute inset-0 rounded-full border border-accent/40"
         initial={{ scale: 0.7, opacity: 0 }}
         animate={{ scale: 1.35, opacity: 0 }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut', delay: 0.6 }}
+        transition={{
+          duration: 1.6,
+          repeat: Infinity,
+          ease: 'easeOut',
+          delay: 0.6,
+        }}
       />
       <motion.div
         className="relative z-10 flex items-center justify-center w-20 h-20 rounded-full"
@@ -51,7 +64,9 @@ function CopyButton({ text }: { text: string }) {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch { /* no clipboard access */ }
+    } catch {
+      /* no clipboard access */
+    }
   }
 
   return (
@@ -60,10 +75,11 @@ function CopyButton({ text }: { text: string }) {
       aria-label="Copy"
       className="flex items-center gap-1.5 text-muted-foreground/60 hover:text-foreground transition-colors"
     >
-      {copied
-        ? <Check size={13} strokeWidth={2.2} className="text-accent" />
-        : <Copy size={13} strokeWidth={1.8} />
-      }
+      {copied ? (
+        <Check size={13} strokeWidth={2.2} className="text-accent" />
+      ) : (
+        <Copy size={13} strokeWidth={1.8} />
+      )}
       <span className="text-[0.55rem] tracking-[0.12em] uppercase">
         {copied ? 'Copied' : 'Copy'}
       </span>
@@ -88,10 +104,13 @@ function BankTransferInstructions({ total }: { total?: number }) {
         </span>
       </div>
       <p className="text-[0.65rem] leading-relaxed tracking-[0.04em] text-muted-foreground">
-        Your order is reserved for <strong className="text-foreground">24 hours</strong>. Transfer{' '}
+        Your order is reserved for{' '}
+        <strong className="text-foreground">24 hours</strong>. Transfer{' '}
         {total ? (
           <strong className="text-foreground">₦{total.toLocaleString()}</strong>
-        ) : 'the exact amount'}{' '}
+        ) : (
+          'the exact amount'
+        )}{' '}
         to the account below and send proof of payment to our{' '}
         <a
           href="https://wa.me/2348164763362"
@@ -100,18 +119,26 @@ function BankTransferInstructions({ total }: { total?: number }) {
           className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
         >
           WhatsApp
-        </a>.
+        </a>
+        .
       </p>
       <div className="space-y-2 pt-1">
         {[
-          { label: 'Bank',           value: 'Moniepoint'               },
-          { label: 'Account Number', value: '7014006235'               },
-          { label: 'Account Name',   value: 'Vickscents and Cosmetics' },
+          { label: 'Bank', value: 'Moniepoint' },
+          { label: 'Account Number', value: '7014006235' },
+          { label: 'Account Name', value: 'Vickscents and Cosmetics' },
         ].map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-            <span className="text-[0.58rem] tracking-[0.14em] uppercase text-muted-foreground">{label}</span>
+          <div
+            key={label}
+            className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0"
+          >
+            <span className="text-[0.58rem] tracking-[0.14em] uppercase text-muted-foreground">
+              {label}
+            </span>
             <div className="flex items-center gap-2">
-              <span className="text-[0.7rem] font-semibold text-foreground tabular-nums">{value}</span>
+              <span className="text-[0.7rem] font-semibold text-foreground tabular-nums">
+                {value}
+              </span>
               {label === 'Account Number' && <CopyButton text={value} />}
             </div>
           </div>
@@ -135,21 +162,30 @@ function OrderItemsSummary({ order }: { order: IOrder }) {
       {order.items.map((item, i) => (
         <div key={i} className="flex items-center gap-3 px-4 py-3">
           {item.image && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={item.image}
               alt={item.name}
-              className="w-10 h-10 object-cover shrink-0 bg-muted"
+              width={40}
+              height={40}
+              className="object-cover shrink-0 bg-muted"
             />
           )}
           {!item.image && (
             <div className="w-10 h-10 shrink-0 bg-muted/40 flex items-center justify-center">
-              <Package size={14} strokeWidth={1.5} className="text-muted-foreground/40" />
+              <Package
+                size={14}
+                strokeWidth={1.5}
+                className="text-muted-foreground/40"
+              />
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-[0.72rem] font-medium text-foreground truncate">{item.name}</p>
-            <p className="text-[0.6rem] text-muted-foreground">{item.size} · qty {item.qty}</p>
+            <p className="text-[0.72rem] font-medium text-foreground truncate">
+              {item.name}
+            </p>
+            <p className="text-[0.6rem] text-muted-foreground">
+              {item.size} · qty {item.qty}
+            </p>
           </div>
           <span className="text-[0.7rem] font-semibold tabular-nums shrink-0">
             ₦{(item.pricePerUnit * item.qty).toLocaleString()}
@@ -159,7 +195,10 @@ function OrderItemsSummary({ order }: { order: IOrder }) {
 
       {/* Pricing breakdown */}
       <div className="px-4 py-3 space-y-1.5">
-        <Row label="Subtotal"  value={`₦${order.pricing.subtotal.toLocaleString()}`} />
+        <Row
+          label="Subtotal"
+          value={`₦${order.pricing.subtotal.toLocaleString()}`}
+        />
         {order.pricing.discount > 0 && (
           <Row
             label={`Discount${order.pricing.couponLabel ? ` (${order.pricing.couponLabel})` : ''}`}
@@ -167,25 +206,53 @@ function OrderItemsSummary({ order }: { order: IOrder }) {
             accent
           />
         )}
-        <Row label="Delivery"  value={order.pricing.deliveryFee === 0 ? 'Free' : `₦${order.pricing.deliveryFee.toLocaleString()}`} />
+        <Row
+          label="Delivery"
+          value={
+            order.pricing.deliveryFee === 0
+              ? 'Free'
+              : `₦${order.pricing.deliveryFee.toLocaleString()}`
+          }
+        />
         {order.pricing.giftWrapFee > 0 && (
-          <Row label="Gift wrap" value={`₦${order.pricing.giftWrapFee.toLocaleString()}`} />
+          <Row
+            label="Gift wrap"
+            value={`₦${order.pricing.giftWrapFee.toLocaleString()}`}
+          />
         )}
         <div className="pt-1.5 border-t border-border/40">
-          <Row label="Total" value={`₦${order.pricing.total.toLocaleString()}`} bold />
+          <Row
+            label="Total"
+            value={`₦${order.pricing.total.toLocaleString()}`}
+            bold
+          />
         </div>
       </div>
     </motion.div>
   );
 }
 
-function Row({ label, value, accent, bold }: { label: string; value: string; accent?: boolean; bold?: boolean }) {
+function Row({
+  label,
+  value,
+  accent,
+  bold,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  bold?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between">
-      <span className={`text-[0.6rem] tracking-widest uppercase ${bold ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
+      <span
+        className={`text-[0.6rem] tracking-widest uppercase ${bold ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}
+      >
         {label}
       </span>
-      <span className={`text-[0.7rem] tabular-nums ${bold ? 'font-bold text-foreground' : accent ? 'text-accent font-medium' : 'text-foreground'}`}>
+      <span
+        className={`text-[0.7rem] tabular-nums ${bold ? 'font-bold text-foreground' : accent ? 'text-accent font-medium' : 'text-foreground'}`}
+      >
         {value}
       </span>
     </div>
@@ -206,24 +273,27 @@ function OrderSkeleton() {
 // ── Inner page ──────────────────────────────────────────────────────────────────
 
 function OrderConfirmationInner() {
-  const params    = useSearchParams();
-  const orderId   = params.get('orderId');
+  const params = useSearchParams();
+  const orderId = params.get('orderId');
   const reference = params.get('ref');
-  const method    = params.get('method');
+  const method = params.get('method');
 
   const isBankTransfer = method === 'bank-transfer';
 
-  const [order,   setOrder]   = useState<IOrder | null>(null);
+  const [order, setOrder] = useState<IOrder | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Lookup key: prefer orderId, fall back to Paystack reference
   const lookupKey = orderId ?? reference;
 
   useEffect(() => {
-    if (!lookupKey) { setLoading(false); return; }
+    if (!lookupKey) {
+      setLoading(false);
+      return;
+    }
 
     fetch(`/api/orders/${lookupKey}`, { credentials: 'include' })
-      .then(r => (r.ok ? r.json() : null))
+      .then((r) => (r.ok ? r.json() : null))
       .then((res: { data?: IOrder } | null) => {
         if (res?.data) setOrder(res.data);
       })
@@ -232,13 +302,12 @@ function OrderConfirmationInner() {
   }, [lookupKey]);
 
   // Derive display ID
-  const displayRef  = order?.orderNumber ?? reference ?? orderId ?? 'N/A';
+  const displayRef = order?.orderNumber ?? reference ?? orderId ?? 'N/A';
   const displayLabel = reference ? 'Payment Reference' : 'Order Number';
-  const orderTotal  = order?.pricing.total;
+  const orderTotal = order?.pricing.total;
 
   return (
     <div className="max-w-lg mx-auto px-5 sm:px-8 py-16 sm:py-24 space-y-10">
-
       {/* ── Success ring ── */}
       <SuccessRing />
 
@@ -255,8 +324,7 @@ function OrderConfirmationInner() {
         <p className="text-[0.68rem] tracking-[0.08em] leading-relaxed text-muted-foreground max-w-xs mx-auto">
           {isBankTransfer
             ? "We've reserved your order. Complete your bank transfer within 24 hours to confirm."
-            : "Your payment was successful. We're preparing your order and will be in touch soon."
-          }
+            : "Your payment was successful. We're preparing your order and will be in touch soon."}
         </p>
       </motion.div>
 
@@ -276,7 +344,8 @@ function OrderConfirmationInner() {
           </p>
           {order?.contact && (
             <p className="text-[0.58rem] text-muted-foreground/70 tracking-[0.04em] pt-0.5">
-              {order.contact.firstName} {order.contact.lastName} · {order.contact.email}
+              {order.contact.firstName} {order.contact.lastName} ·{' '}
+              {order.contact.email}
             </p>
           )}
         </div>
@@ -299,11 +368,14 @@ function OrderConfirmationInner() {
           className="space-y-3"
         >
           {[
-            { step: '01', text: 'Order confirmation sent to your email'       },
-            { step: '02', text: 'Our team prepares and packages your order'   },
+            { step: '01', text: 'Order confirmation sent to your email' },
+            { step: '02', text: 'Our team prepares and packages your order' },
             { step: '03', text: 'Shipped with tracking details via SMS/email' },
           ].map(({ step, text }) => (
-            <div key={step} className="flex items-center gap-4 py-2 border-b border-border/40 last:border-0">
+            <div
+              key={step}
+              className="flex items-center gap-4 py-2 border-b border-border/40 last:border-0"
+            >
               <span
                 className="shrink-0 text-[0.52rem] tracking-[0.2em] font-semibold w-7 text-center"
                 style={{ color: 'oklch(0.72 0.10 74)' }}
@@ -350,7 +422,6 @@ function OrderConfirmationInner() {
       >
         Questions? Reach us on WhatsApp or email hello@aurafume.com
       </motion.p>
-
     </div>
   );
 }

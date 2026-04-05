@@ -8,7 +8,7 @@ interface PaystackEvent {
   data: {
     reference: string;
     status: string;
-    amount: number;       // in kobo
+    amount: number; // in kobo
     currency: string;
     customer: { email: string };
     paid_at?: string;
@@ -21,11 +21,14 @@ export async function POST(req: NextRequest) {
 
   // ── HMAC verification ──────────────────────────────────────────────────────
   const signature = req.headers.get('x-paystack-signature') ?? '';
-  const secret    = process.env.PAYSTACK_SECRET_KEY;
+  const secret = process.env.PAYSTACK_SECRET_KEY;
 
   if (!secret) {
     console.error('[Paystack Webhook] PAYSTACK_SECRET_KEY not set');
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Server misconfiguration' },
+      { status: 500 },
+    );
   }
 
   const expected = createHmac('sha512', secret).update(body).digest('hex');
@@ -37,16 +40,21 @@ export async function POST(req: NextRequest) {
   let event: PaystackEvent;
   try {
     event = JSON.parse(body) as PaystackEvent;
+    console.log(event.event, 'event.event');
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
   // ── Event handlers ─────────────────────────────────────────────────────────
   switch (event.event) {
-
     case 'charge.success': {
       const { reference, amount, paid_at } = event.data;
-      console.log('[Paystack] charge.success — ref:', reference, '— amount (kobo):', amount);
+      console.log(
+        '[Paystack] charge.success — ref:',
+        reference,
+        '— amount (kobo):',
+        amount,
+      );
 
       try {
         await connectDB();
@@ -55,10 +63,10 @@ export async function POST(req: NextRequest) {
           { 'payment.paystackRef': reference },
           {
             $set: {
-              'payment.status':    'paid',
-              'payment.paidAt':    paid_at ? new Date(paid_at) : new Date(),
+              'payment.status': 'paid',
+              'payment.paidAt': paid_at ? new Date(paid_at) : new Date(),
               'payment.amountPaid': Math.round(amount / 100), // kobo → Naira
-              status:              'confirmed',
+              status: 'confirmed',
             },
           },
           { new: true },
@@ -69,7 +77,10 @@ export async function POST(req: NextRequest) {
           // This is safe to ignore — place-order-cta creates the order first, then opens Paystack.
           console.warn('[Paystack Webhook] No order found for ref:', reference);
         } else {
-          console.log('[Paystack Webhook] Order confirmed:', updated.orderNumber);
+          console.log(
+            '[Paystack Webhook] Order confirmed:',
+            updated.orderNumber,
+          );
         }
       } catch (err) {
         console.error('[Paystack Webhook] DB update failed:', err);

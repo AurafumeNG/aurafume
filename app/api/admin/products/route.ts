@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
         .sort({ createdAt: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
-        .select('name slug status isFeatured isNewArrival isBestSeller variants images createdAt')
+        .select('name slug status isFeatured isNewArrival isBestSeller variants images fragranceFamilies gender createdAt')
         .lean(),
       Product.countDocuments(filter),
     ]);

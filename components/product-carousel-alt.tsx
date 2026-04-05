@@ -3,102 +3,29 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Heart, ShoppingBag, Check, ArrowLeft, ArrowRight, X } from 'lucide-react';
+import {
+  Heart,
+  ShoppingBag,
+  Check,
+  ArrowLeft,
+  ArrowRight,
+  X,
+} from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
-type Gender = 'him' | 'her' | 'unisex';
+export type BestSellerGender = 'him' | 'her' | 'unisex';
 
-interface Product {
+export interface BestSellerProduct {
   id: string;
   name: string;
   notes: string;
-  gender: Gender;
+  gender: BestSellerGender;
   price: number;
   frontImage: string;
   backImage: string;
   badge?: string;
   href: string;
 }
-
-// ── Data ───────────────────────────────────────────────────────────
-const products: Product[] = [
-  {
-    id: 'loving-you-frozen',
-    name: 'Loving You Frozen',
-    notes: 'Floral · Musky · Amber',
-    gender: 'her',
-    price: 149500,
-    frontImage: '/images/image5.jpeg',
-    backImage: '/images/image2.jpeg',
-    badge: 'Best Seller',
-    href: '/shop/loving-you-frozen',
-  },
-  {
-    id: 'stronger-intense',
-    name: 'Stronger For You Intense',
-    notes: 'Woody · Spicy · Warm',
-    gender: 'him',
-    price: 175000,
-    frontImage: '/images/image3.jpeg',
-    backImage: '/images/image3.jpeg',
-    badge: 'Best Seller',
-    href: '/shop/stronger-for-you-intense',
-  },
-  {
-    id: 'stronger-absolute',
-    name: 'Stronger For You Absolute',
-    notes: 'Oriental · Resinous · Bold',
-    gender: 'him',
-    price: 185000,
-    frontImage: '/images/image11.jpeg',
-    backImage: '/images/image4.jpeg',
-    badge: 'New',
-    href: '/shop/stronger-for-you-absolute',
-  },
-  {
-    id: 'suger-edp',
-    name: 'Suger EDP',
-    notes: 'Fresh · Green · Earthy',
-    gender: 'unisex',
-    price: 139500,
-    frontImage: '/images/image1.jpeg',
-    backImage: '/images/image6.jpeg',
-    badge: 'Best Seller',
-    href: '/shop/suger-edp',
-  },
-  {
-    id: 'read-lux',
-    name: "Re'ad Lux",
-    notes: 'Citrus · Floral · Musk',
-    gender: 'her',
-    price: 195000,
-    frontImage: '/images/image7.jpeg',
-    backImage: '/images/image7.jpeg',
-    badge: 'New',
-    href: '/shop/read-lux',
-  },
-  {
-    id: 'al-oud',
-    name: 'Al Oud',
-    notes: 'Oud · Resinous · Smoky',
-    gender: 'him',
-    price: 210000,
-    frontImage: '/images/image8.jpeg',
-    backImage: '/images/image8.jpeg',
-    badge: 'Best Seller',
-    href: '/shop/al-oud',
-  },
-  {
-    id: 'aura-collection',
-    name: 'AuraFume Collection',
-    notes: 'Eclectic · Layered · Unisex',
-    gender: 'unisex',
-    price: 125000,
-    frontImage: '/images/image10.jpeg',
-    backImage: '/images/image9.jpeg',
-    href: '/shop/aura-collection',
-  },
-];
 
 const TABS = ['All', 'Him', 'Her', 'Unisex'] as const;
 type Tab = (typeof TABS)[number];
@@ -109,7 +36,7 @@ function MiniCart({
   open,
   onClose,
 }: {
-  product: Product | null;
+  product: BestSellerProduct | null;
   open: boolean;
   onClose: () => void;
 }) {
@@ -117,7 +44,9 @@ function MiniCart({
     <>
       <div
         className={`fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm transition-opacity duration-300 ${
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          open
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
       />
@@ -127,8 +56,14 @@ function MiniCart({
         }`}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-          <p className="font-heading text-base text-foreground">Added to Cart</p>
-          <button onClick={onClose} aria-label="Close cart" className="text-foreground/40 hover:text-foreground transition-colors">
+          <p className="font-heading text-base text-foreground">
+            Added to Cart
+          </p>
+          <button
+            onClick={onClose}
+            aria-label="Close cart"
+            className="text-foreground/40 hover:text-foreground transition-colors"
+          >
             <X size={17} />
           </button>
         </div>
@@ -137,18 +72,35 @@ function MiniCart({
           <div className="flex-1 px-6 py-6 overflow-y-auto">
             <div className="flex gap-4">
               <div className="relative w-[72px] h-[90px] overflow-hidden shrink-0 bg-card">
-                <Image src={product.frontImage} alt={product.name} fill className="object-cover" />
+                <Image
+                  src={product.frontImage}
+                  alt={product.name}
+                  fill
+                  className="object-cover"
+                />
               </div>
               <div className="flex flex-col gap-1.5 pt-1 min-w-0">
-                <p className="text-[0.62rem] text-muted-foreground tracking-[0.2em] uppercase">{product.notes}</p>
-                <p className="text-[13px] font-medium text-foreground leading-snug">{product.name}</p>
-                <p className="text-[13px] text-foreground/70">₦{product.price.toLocaleString('en-NG')}</p>
-                <p className="text-[11px] text-muted-foreground">Qty: 1 · 50ml EDP</p>
+                <p className="text-[0.62rem] text-muted-foreground tracking-[0.2em] uppercase">
+                  {product.notes}
+                </p>
+                <p className="text-[13px] font-medium text-foreground leading-snug">
+                  {product.name}
+                </p>
+                <p className="text-[13px] text-foreground/70">
+                  ₦{product.price.toLocaleString('en-NG')}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Qty: 1 · 50ml EDP
+                </p>
               </div>
             </div>
             <div className="mt-6 pt-5 border-t border-border flex justify-between items-center">
-              <span className="text-[11px] text-muted-foreground uppercase tracking-widest">Subtotal</span>
-              <span className="text-sm font-medium text-foreground">₦{product.price.toLocaleString('en-NG')}</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-widest">
+                Subtotal
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                ₦{product.price.toLocaleString('en-NG')}
+              </span>
             </div>
           </div>
         )}
@@ -161,7 +113,10 @@ function MiniCart({
           >
             View Cart
           </Link>
-          <button onClick={onClose} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors tracking-widest uppercase">
+          <button
+            onClick={onClose}
+            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors tracking-widest uppercase"
+          >
             Continue Shopping
           </button>
         </div>
@@ -177,7 +132,7 @@ function ProductCard({
   onWishlist,
   onQuickAdd,
 }: {
-  product: Product;
+  product: BestSellerProduct;
   isWishlisted: boolean;
   onWishlist: () => void;
   onQuickAdd: () => void;
@@ -225,7 +180,10 @@ function ProductCard({
 
         {/* Wishlist — top-right (carousel addition) */}
         <button
-          onClick={(e) => { e.preventDefault(); onWishlist(); }}
+          onClick={(e) => {
+            e.preventDefault();
+            onWishlist();
+          }}
           aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
           className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center bg-background/80 backdrop-blur-sm hover:scale-110 active:scale-95 transition-transform duration-150"
         >
@@ -233,7 +191,9 @@ function ProductCard({
             size={13}
             strokeWidth={1.75}
             className={`transition-all duration-300 ${
-              isWishlisted ? 'fill-rose-500 text-rose-500' : 'fill-none text-foreground/60'
+              isWishlisted
+                ? 'fill-rose-500 text-rose-500'
+                : 'fill-none text-foreground/60'
             }`}
           />
         </button>
@@ -250,9 +210,15 @@ function ProductCard({
             }`}
           >
             {added ? (
-              <><Check size={13} strokeWidth={2.5} />Added</>
+              <>
+                <Check size={13} strokeWidth={2.5} />
+                Added
+              </>
             ) : (
-              <><ShoppingBag size={13} />Quick Add</>
+              <>
+                <ShoppingBag size={13} />
+                Quick Add
+              </>
             )}
           </button>
         </div>
@@ -277,10 +243,10 @@ function ProductCard({
 }
 
 // ── Main Section ───────────────────────────────────────────────────
-export default function ProductCarouselAlt() {
+export default function BestSellers({ products = [] }: { products?: BestSellerProduct[] }) {
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
-  const [cartProduct, setCartProduct] = useState<Product | null>(null);
+  const [cartProduct, setCartProduct] = useState<BestSellerProduct | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(true);
@@ -299,7 +265,10 @@ export default function ProductCarouselAlt() {
   }, []);
 
   function scroll(dir: 'left' | 'right') {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -230 : 230, behavior: 'smooth' });
+    scrollRef.current?.scrollBy({
+      left: dir === 'left' ? -230 : 230,
+      behavior: 'smooth',
+    });
   }
 
   function toggleWishlist(id: string) {
@@ -310,7 +279,7 @@ export default function ProductCarouselAlt() {
     });
   }
 
-  function handleQuickAdd(product: Product) {
+  function handleQuickAdd(product: BestSellerProduct) {
     setCartProduct(product);
     setCartOpen(true);
   }
@@ -323,12 +292,13 @@ export default function ProductCarouselAlt() {
     return () => clearTimeout(t);
   }, [activeTab, sync]);
 
-  useEffect(() => { sync(); }, [sync]);
+  useEffect(() => {
+    sync();
+  }, [sync]);
 
   return (
     <section className="bg-background py-20 md:py-28">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
-
         {/* ── Header — matches FeaturedProducts layout ── */}
         <div className="flex items-end justify-between mb-10">
           <div>
@@ -347,7 +317,10 @@ export default function ProductCarouselAlt() {
           >
             View All
             <span className="block h-px w-6 bg-foreground/30 transition-all duration-300 group-hover:w-10 group-hover:bg-foreground" />
-            <ArrowRight size={12} className="opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+            <ArrowRight
+              size={12}
+              className="opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0"
+            />
           </Link>
         </div>
 
@@ -374,7 +347,9 @@ export default function ProductCarouselAlt() {
               disabled={!canLeft}
               aria-label="Previous"
               className={`w-8 h-8 rounded-full border border-border flex items-center justify-center transition-all duration-200 ${
-                canLeft ? 'text-foreground hover:border-accent hover:text-accent' : 'text-foreground/20 cursor-default'
+                canLeft
+                  ? 'text-foreground hover:border-accent hover:text-accent'
+                  : 'text-foreground/20 cursor-default'
               }`}
             >
               <ArrowLeft size={14} />
@@ -384,7 +359,9 @@ export default function ProductCarouselAlt() {
               disabled={!canRight}
               aria-label="Next"
               className={`w-8 h-8 rounded-full border border-border flex items-center justify-center transition-all duration-200 ${
-                canRight ? 'text-foreground hover:border-accent hover:text-accent' : 'text-foreground/20 cursor-default'
+                canRight
+                  ? 'text-foreground hover:border-accent hover:text-accent'
+                  : 'text-foreground/20 cursor-default'
               }`}
             >
               <ArrowRight size={14} />
@@ -431,10 +408,13 @@ export default function ProductCarouselAlt() {
             <ArrowRight size={12} />
           </Link>
         </div>
-
       </div>
 
-      <MiniCart product={cartProduct} open={cartOpen} onClose={() => setCartOpen(false)} />
+      <MiniCart
+        product={cartProduct}
+        open={cartOpen}
+        onClose={() => setCartOpen(false)}
+      />
     </section>
   );
 }

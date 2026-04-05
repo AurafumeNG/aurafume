@@ -12,7 +12,7 @@ interface SizeOption {
   price: number;
 }
 
-interface Arrival {
+export interface Arrival {
   id: string;
   name: string;
   descriptor: string;
@@ -20,46 +20,6 @@ interface Arrival {
   image: string;
   sizes: SizeOption[];
 }
-
-// ── Data ────────────────────────────────────────────────────────────
-const arrivals: Arrival[] = [
-  {
-    id: 'oud-imperiale',
-    name: 'Oud Impériale',
-    descriptor: 'A sovereign darkness',
-    notes: 'Oud · Black Rose · Amber · Incense',
-    image: '/images/image8.jpeg',
-    sizes: [
-      { label: '15ml', price: 55000 },
-      { label: '50ml', price: 145000 },
-      { label: '100ml', price: 235000 },
-    ],
-  },
-  {
-    id: 'aurore-blanche',
-    name: 'Aurore Blanche',
-    descriptor: 'Light caught at dawn',
-    notes: 'White Musk · Magnolia · Cedarwood',
-    image: '/images/image7.jpeg',
-    sizes: [
-      { label: '15ml', price: 48000 },
-      { label: '50ml', price: 132000 },
-      { label: '100ml', price: 215000 },
-    ],
-  },
-  {
-    id: 'vetiver-noir',
-    name: 'Vétiver Noir',
-    descriptor: 'Earth and smoke, unfiltered',
-    notes: 'Vetiver · Smoke · Leather · Dry Wood',
-    image: '/images/image11.jpeg',
-    sizes: [
-      { label: '15ml', price: 52000 },
-      { label: '50ml', price: 138000 },
-      { label: '100ml', price: 224000 },
-    ],
-  },
-];
 
 const SECTION_LAUNCH = 'April 2026';
 
@@ -83,17 +43,18 @@ async function toggleWishlist(
 // ── Arrival card ────────────────────────────────────────────────────
 function ArrivalCard({ arrival, index }: { arrival: Arrival; index: number }) {
   const { addToCart } = useCart();
-  const [selectedSize, setSelectedSize] = useState(1); // default 50ml
+  const [selectedSize, setSelectedSize] = useState(0);
   const [added, setAdded] = useState(false);
   const [wishlisted, setWishlisted] = useState(false);
   const [wishlistPending, setWishlistPending] = useState(false);
 
-  const price = arrival.sizes[selectedSize].price;
+  const clampedSize = Math.min(selectedSize, arrival.sizes.length - 1);
+  const price = arrival.sizes[clampedSize]?.price ?? 0;
 
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     if (added) return;
-    const size = arrival.sizes[selectedSize];
+    const size = arrival.sizes[clampedSize];
     addToCart({
       productId:    arrival.id,
       slug:         arrival.id,
@@ -230,7 +191,7 @@ function ArrivalCard({ arrival, index }: { arrival: Arrival; index: number }) {
 }
 
 // ── Main component ──────────────────────────────────────────────────
-export default function NewArrivals() {
+export default function NewArrivals({ arrivals = [] }: { arrivals?: Arrival[] }) {
   return (
     <section className="bg-card py-20 md:py-28">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
@@ -263,11 +224,17 @@ export default function NewArrivals() {
         </motion.div>
 
         {/* Cards grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
-          {arrivals.map((arrival, i) => (
-            <ArrivalCard key={arrival.id} arrival={arrival} index={i} />
-          ))}
-        </div>
+        {arrivals.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
+            {arrivals.map((arrival, i) => (
+              <ArrivalCard key={arrival.id} arrival={arrival} index={i} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm py-12 text-center">
+            No new arrivals yet.
+          </p>
+        )}
       </div>
     </section>
   );

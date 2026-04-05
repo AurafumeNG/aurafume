@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { ImagePlus, X, GripVertical, Crop, AlertCircle } from 'lucide-react';
 import type { UploadedImage, ProductDraft } from './types';
+import Image from 'next/image';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -33,20 +34,16 @@ async function uploadToCloudinary(
     );
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 99));
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 99));
+      }
     };
 
     xhr.onload = () => {
       if (xhr.status === 200) {
-        // Parse and validate before resolving — never call onProgress(100) here
-        // because that would queue a separate state update that races with the
-        // URL update in handleFiles, leaving img.url as the blob reference.
         let data: { secure_url?: string; public_id?: string };
         try {
-          data = JSON.parse(xhr.responseText) as {
-            secure_url?: string;
-            public_id?: string;
-          };
+          data = JSON.parse(xhr.responseText);
         } catch {
           reject(new Error('Invalid JSON response from Cloudinary'));
           return;
@@ -136,9 +133,6 @@ function ImageThumb({
   onDragOver: (e: React.DragEvent) => void;
   onDrop: () => void;
 }) {
-  console.log('====================================');
-  console.log(img.url);
-  console.log('====================================');
   return (
     <div
       draggable
@@ -154,15 +148,14 @@ function ImageThumb({
         transition: 'opacity 0.15s, outline 0.10s',
       }}
     >
-      {/* Image */}
-      <img
+      <Image
         src={img.url}
         alt=""
-        className="w-full h-full object-cover"
+        fill
+        className="object-cover"
         style={{ borderRadius: '3px' }}
       />
 
-      {/* Upload progress overlay */}
       {img.progress !== undefined && img.progress < 100 && (
         <>
           <div
@@ -180,7 +173,6 @@ function ImageThumb({
         </>
       )}
 
-      {/* Main badge */}
       {isMain && img.progress === undefined && (
         <span
           className="absolute top-1.5 left-1.5 text-[0.40rem] tracking-[0.12em] uppercase font-semibold px-1.5 py-0.5"
@@ -194,64 +186,41 @@ function ImageThumb({
         </span>
       )}
 
-      {/* Hover controls */}
       <div
         className="absolute inset-0 flex items-start justify-end gap-1 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
         style={{ background: 'rgba(0,0,0,0.40)', borderRadius: '3px' }}
       >
-        {/* Crop (placeholder action) */}
         <button
           type="button"
-          title="Crop"
-          onClick={(e) => {
-            e.stopPropagation(); /* TODO: open crop modal */
-          }}
+          onClick={(e) => e.stopPropagation()}
           className="flex items-center justify-center w-6 h-6 transition-colors"
           style={{
             background: 'rgba(255,255,255,0.12)',
             borderRadius: '2px',
             color: 'rgba(255,255,255,0.70)',
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(255,255,255,0.22)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(255,255,255,0.12)';
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
         >
           <Crop size={11} strokeWidth={1.8} />
         </button>
 
-        {/* Delete */}
         <button
           type="button"
-          title="Remove"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="flex items-center justify-center w-6 h-6 transition-colors"
           style={{
             background: 'rgba(239,68,68,0.18)',
             borderRadius: '2px',
             color: 'rgba(239,68,68,0.85)',
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(239,68,68,0.32)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(239,68,68,0.18)';
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.32)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; }}
         >
           <X size={11} strokeWidth={2} />
         </button>
       </div>
 
-      {/* Drag handle (bottom-left) */}
       <div
         className="absolute bottom-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ color: 'rgba(255,255,255,0.55)' }}
@@ -292,18 +261,13 @@ function DropZone({
   return (
     <div
       onClick={() => !disabled && inputRef.current?.click()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!disabled) setDragOver(true);
-      }}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       className="flex flex-col items-center justify-center gap-3 py-8 transition-all duration-150"
       style={{
         border: `1px dashed ${dragOver ? GOLD : 'rgba(255,255,255,0.10)'}`,
-        background: dragOver
-          ? 'rgba(180,130,60,0.04)'
-          : 'rgba(255,255,255,0.01)',
+        background: dragOver ? 'rgba(180,130,60,0.04)' : 'rgba(255,255,255,0.01)',
         borderRadius: '3px',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
@@ -355,88 +319,54 @@ export default function ProductImagesSection({
 }: ProductImagesProps) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [errors,  setErrors]  = useState<string[]>([]);
 
   const images = value.images;
   const canAdd = images.length < MAX_IMAGES;
-  console.log(images, 'images');
 
-  // Always-current refs so async callbacks never close over stale values.
-  const imagesRef = useRef(images);
-  const onChangeRef = useRef(onChange);
-  imagesRef.current = images;
-  onChangeRef.current = onChange;
+  const imagesRef    = useRef(images);
+  imagesRef.current  = images;
 
-  // Stable: reads refs at call-time, never stale.
-  const setImages = useCallback((imgs: UploadedImage[]) => {
-    onChangeRef.current({ images: imgs });
-  }, []);
+  function setImages(imgs: UploadedImage[]) {
+    onChange({ images: imgs });
+  }
 
-  // Stable: uses imagesRef so it always sees the live array.
-  const updateImage = useCallback(
-    (id: string, patch: Partial<UploadedImage>) => {
-      onChangeRef.current({
-        images: imagesRef.current.map((img) =>
-          img.id === id ? { ...img, ...patch } : img,
-        ),
-      });
-    },
-    [],
-  );
+  function updateImage(id: string, patch: Partial<UploadedImage>) {
+    setImages(imagesRef.current.map((img) => img.id === id ? { ...img, ...patch } : img));
+  }
 
-  const handleFiles = useCallback(
-    async (files: File[]) => {
-      const errs: string[] = [];
-      const snapshot = imagesRef.current;
-      const valid = files
-        .filter((f) => {
-          if (!ACCEPT_MIME.includes(f.type)) {
-            errs.push(`${f.name}: unsupported format`);
-            return false;
-          }
-          if (f.size > MAX_MB * 1024 * 1024) {
-            errs.push(`${f.name}: exceeds ${MAX_MB}MB limit`);
-            return false;
-          }
-          return true;
-        })
-        .slice(0, MAX_IMAGES - snapshot.length);
+  function handleFiles(files: File[]) {
+    const errs: string[] = [];
+    const snapshot = imagesRef.current;
+    const valid = files
+      .filter((f) => {
+        if (!ACCEPT_MIME.includes(f.type)) { errs.push(`${f.name}: unsupported format`); return false; }
+        if (f.size > MAX_MB * 1024 * 1024) { errs.push(`${f.name}: exceeds ${MAX_MB}MB limit`); return false; }
+        return true;
+      })
+      .slice(0, MAX_IMAGES - snapshot.length);
 
-      setErrors(errs);
-      if (!valid.length) return;
+    setErrors(errs);
+    if (!valid.length) return;
 
-      const placeholders: UploadedImage[] = valid.map((f) => ({
-        id: crypto.randomUUID(),
-        url: URL.createObjectURL(f),
-        publicId: '',
-        progress: 0,
-      }));
+    const placeholders: UploadedImage[] = valid.map((f) => ({
+      id:       crypto.randomUUID(),
+      url:      URL.createObjectURL(f),
+      publicId: '',
+      progress: 0,
+    }));
 
-      setImages([...snapshot, ...placeholders]);
+    setImages([...snapshot, ...placeholders]);
 
-      for (let i = 0; i < valid.length; i++) {
-        const file = valid[i];
-        const imgId = placeholders[i].id;
-
-        try {
-          const { url, publicId } = await uploadToCloudinary(file, (pct) => {
-            updateImage(imgId, { progress: pct });
-          });
-          updateImage(imgId, { url, publicId, progress: undefined });
-        } catch (err) {
-          console.error('[ProductImagesSection] upload error:', err);
-          onChangeRef.current({
-            images: imagesRef.current.filter((img) => img.id !== imgId),
-          });
+    valid.forEach((file, i) => {
+      const imgId = placeholders[i].id;
+      uploadToCloudinary(file, (pct) => updateImage(imgId, { progress: pct }))
+        .then(({ url, publicId }) => updateImage(imgId, { url, publicId, progress: undefined }))
+        .catch(() => {
+          setImages(imagesRef.current.filter((img) => img.id !== imgId));
           setErrors((prev) => [...prev, `${file.name}: upload failed`]);
-        }
-      }
-    },
-    [setImages, updateImage],
-  );
-
-  function handleDelete(id: string) {
-    setImages(imagesRef.current.filter((img) => img.id !== id));
+        });
+    });
   }
 
   function handleDrop(dropIdx: number) {
@@ -451,23 +381,14 @@ export default function ProductImagesSection({
 
   return (
     <SectionCard title="Product Images">
-      {/* Drop zone — only when slots remain */}
       <DropZone disabled={!canAdd} onFiles={handleFiles} />
 
-      {/* Errors */}
       {errors.length > 0 && (
         <div className="space-y-1">
           {errors.map((err, i) => (
             <div key={i} className="flex items-center gap-2">
-              <AlertCircle
-                size={11}
-                strokeWidth={1.8}
-                style={{ color: 'rgba(239,68,68,0.80)', flexShrink: 0 }}
-              />
-              <span
-                className="text-[0.48rem] tracking-[0.06em]"
-                style={{ color: 'rgba(239,68,68,0.75)' }}
-              >
+              <AlertCircle size={11} strokeWidth={1.8} style={{ color: 'rgba(239,68,68,0.80)', flexShrink: 0 }} />
+              <span className="text-[0.48rem] tracking-[0.06em]" style={{ color: 'rgba(239,68,68,0.75)' }}>
                 {err}
               </span>
             </div>
@@ -475,7 +396,6 @@ export default function ProductImagesSection({
         </div>
       )}
 
-      {/* Thumbnail grid */}
       {images.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
           {images.map((img, idx) => (
@@ -485,30 +405,20 @@ export default function ProductImagesSection({
               isMain={idx === 0}
               isDragging={dragIdx === idx}
               isOver={overIdx === idx}
-              onDelete={() => handleDelete(img.id)}
+              onDelete={() => setImages(imagesRef.current.filter((i) => i.id !== img.id))}
               onDragStart={() => setDragIdx(idx)}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOverIdx(idx);
-              }}
+              onDragOver={(e) => { e.preventDefault(); setOverIdx(idx); }}
               onDrop={() => handleDrop(idx)}
             />
           ))}
         </div>
       )}
 
-      {/* Slot counter + tip */}
       <div className="flex items-center justify-between">
-        <p
-          className="text-[0.46rem] tracking-[0.06em]"
-          style={{ color: 'rgba(255,255,255,0.22)' }}
-        >
+        <p className="text-[0.46rem] tracking-[0.06em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
           Recommended: 1000×1000px, white background
         </p>
-        <span
-          className="text-[0.44rem] tracking-[0.08em]"
-          style={{ color: 'rgba(255,255,255,0.22)' }}
-        >
+        <span className="text-[0.44rem] tracking-[0.08em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
           {images.length}/{MAX_IMAGES} images
         </span>
       </div>

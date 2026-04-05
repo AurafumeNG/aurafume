@@ -19,135 +19,215 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminTopNav from '@/components/admin/AdminTopNav';
-import { ALL_PRODUCTS } from '@/lib/products';
 import type { ShopProduct } from '@/components/shop/types';
+import Image from 'next/image';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const GOLD = 'oklch(0.53 0.09 70)';
 
 type AdminProductStatus = 'published' | 'draft' | 'archived';
-type StockStatus        = 'in-stock' | 'low-stock' | 'out-of-stock';
+type StockStatus = 'in-stock' | 'low-stock' | 'out-of-stock';
 type SortKey =
-  | 'newest' | 'oldest'
-  | 'price-asc' | 'price-desc'
-  | 'name-asc'  | 'name-desc'
-  | 'most-sold' | 'least-sold';
+  | 'newest'
+  | 'oldest'
+  | 'price-asc'
+  | 'price-desc'
+  | 'name-asc'
+  | 'name-desc'
+  | 'most-sold'
+  | 'least-sold';
 
 interface AdminProduct extends ShopProduct {
-  sku:         string;
+  sku: string;
   adminStatus: AdminProductStatus;
   stockStatus: StockStatus;
-  totalSold:   number;
-  category:    string;
+  totalSold: number;
+  category: string;
 }
 
 interface AdminUser {
   firstName: string;
-  lastName:  string;
-  email:     string;
-  role:      string;
-  avatar?:   string;
+  lastName: string;
+  email: string;
+  role: string;
+  avatar?: string;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: 'newest',     label: 'Newest First'     },
-  { value: 'oldest',     label: 'Oldest First'     },
-  { value: 'price-asc',  label: 'Price: Low–High'  },
-  { value: 'price-desc', label: 'Price: High–Low'  },
-  { value: 'name-asc',   label: 'Name: A–Z'        },
-  { value: 'name-desc',  label: 'Name: Z–A'        },
-  { value: 'most-sold',  label: 'Most Sold'        },
-  { value: 'least-sold', label: 'Least Sold'       },
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'price-asc', label: 'Price: Low–High' },
+  { value: 'price-desc', label: 'Price: High–Low' },
+  { value: 'name-asc', label: 'Name: A–Z' },
+  { value: 'name-desc', label: 'Name: Z–A' },
+  { value: 'most-sold', label: 'Most Sold' },
+  { value: 'least-sold', label: 'Least Sold' },
 ];
 
-const CATEGORIES = ['All', 'Floral', 'Woody', 'Fresh', 'Oriental', 'Citrus'] as const;
-const STATUSES   = ['All', 'Published', 'Draft', 'Archived']                  as const;
-const STOCKS     = ['All', 'In Stock', 'Low Stock', 'Out of Stock']           as const;
+const CATEGORIES = [
+  'All',
+  'Floral',
+  'Woody',
+  'Fresh',
+  'Oriental',
+  'Citrus',
+] as const;
+const STATUSES = ['All', 'Published', 'Draft', 'Archived'] as const;
+const STOCKS = ['All', 'In Stock', 'Low Stock', 'Out of Stock'] as const;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatNaira(amount: number) {
   if (amount >= 1_000_000) return `₦${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000)     return `₦${(amount / 1_000).toFixed(1)}K`;
+  if (amount >= 1_000) return `₦${(amount / 1_000).toFixed(1)}K`;
   return `₦${amount.toLocaleString('en-NG')}`;
 }
 
 function skuFromId(id: string, index: number): string {
   return (
-    id.split('-').map(w => w[0]?.toUpperCase() ?? '').join('') +
+    id
+      .split('-')
+      .map((w) => w[0]?.toUpperCase() ?? '')
+      .join('') +
     '-' +
     String(index + 1).padStart(3, '0')
   );
 }
 
-function buildAdminProducts(): AdminProduct[] {
-  return ALL_PRODUCTS.map((p, i) => ({
-    ...p,
-    sku:         skuFromId(p.id, i),
-    adminStatus: 'published' as AdminProductStatus,
-    stockStatus: (p.badge === 'Low Stock' ? 'low-stock' : 'in-stock') as StockStatus,
-    totalSold:   p.reviewCount * 2,
-    category:    p.scentTags[0] ?? 'Floral',
-  }));
+// ── API product shape (fields selected in /api/admin/products GET) ─────────────
+
+interface ApiVariant {
+  size: string;
+  sku: string;
+  price: number;
+  stock: number;
+  lowStockThreshold: number;
+}
+
+interface ApiProduct {
+  _id: string;
+  name: string;
+  slug: string;
+  status: AdminProductStatus;
+  isFeatured: boolean;
+  isNewArrival: boolean;
+  isBestSeller: boolean;
+  variants: ApiVariant[];
+  images: { url: string; publicId: string }[];
+  fragranceFamilies: string[];
+  gender: string;
+  createdAt: string;
+}
+
+function computeStockStatus(variants: ApiVariant[]): StockStatus {
+  const total = variants.reduce((s, v) => s + v.stock, 0);
+  if (total === 0) return 'out-of-stock';
+  if (variants.some((v) => v.stock > 0 && v.stock <= v.lowStockThreshold))
+    return 'low-stock';
+  return 'in-stock';
+}
+
+function mapApiProduct(p: ApiProduct, i: number): AdminProduct {
+  const stockStatus = computeStockStatus(p.variants);
+  return {
+    id: p._id,
+    name: p.name,
+    scentFamily: p.fragranceFamilies.join(' · ') || '—',
+    price: p.variants[0]?.price ?? 0,
+    image: p.images[0]?.url ?? '',
+    badge: p.isNewArrival
+      ? 'New'
+      : p.isBestSeller
+        ? 'Best Seller'
+        : stockStatus === 'low-stock'
+          ? 'Low Stock'
+          : undefined,
+    href: `/shop/${p.slug}`,
+    rating: 0,
+    reviewCount: 0,
+    gender: (['Him', 'Her', 'Unisex'].includes(p.gender)
+      ? p.gender
+      : 'Unisex') as ShopProduct['gender'],
+    sizes: p.variants.map((v) => v.size),
+    scentTags: p.fragranceFamilies,
+    createdAt: Math.floor(new Date(p.createdAt).getTime() / 1000),
+    sku: p.variants[0]?.sku || skuFromId(p._id, i),
+    adminStatus: p.status,
+    stockStatus,
+    totalSold: 0,
+    category: p.fragranceFamilies[0] ?? 'Other',
+  };
 }
 
 function applyFiltersAndSort(
-  products:  AdminProduct[],
-  search:    string,
-  category:  string,
-  status:    string,
-  stock:     string,
-  priceMin:  string,
-  priceMax:  string,
-  sort:      SortKey,
+  products: AdminProduct[],
+  search: string,
+  category: string,
+  status: string,
+  stock: string,
+  priceMin: string,
+  priceMax: string,
+  sort: SortKey,
 ): AdminProduct[] {
   let out = [...products];
 
   if (search.trim()) {
     const q = search.toLowerCase();
-    out = out.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q)  ||
-      p.category.toLowerCase().includes(q),
+    out = out.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q),
     );
   }
 
   if (category !== 'All') {
-    out = out.filter(p => p.category === category);
+    out = out.filter((p) => p.category === category);
   }
 
   if (status !== 'All') {
     const s = status.toLowerCase() as AdminProductStatus;
-    out = out.filter(p => p.adminStatus === s);
+    out = out.filter((p) => p.adminStatus === s);
   }
 
   if (stock !== 'All') {
     const map: Record<string, StockStatus> = {
-      'In Stock':     'in-stock',
-      'Low Stock':    'low-stock',
+      'In Stock': 'in-stock',
+      'Low Stock': 'low-stock',
       'Out of Stock': 'out-of-stock',
     };
     const s = map[stock];
-    if (s) out = out.filter(p => p.stockStatus === s);
+    if (s) out = out.filter((p) => p.stockStatus === s);
   }
 
   const minNum = priceMin !== '' ? Number(priceMin) : null;
   const maxNum = priceMax !== '' ? Number(priceMax) : null;
-  if (minNum !== null && !isNaN(minNum)) out = out.filter(p => p.price >= minNum);
-  if (maxNum !== null && !isNaN(maxNum)) out = out.filter(p => p.price <= maxNum);
+  if (minNum !== null && !isNaN(minNum))
+    out = out.filter((p) => p.price >= minNum);
+  if (maxNum !== null && !isNaN(maxNum))
+    out = out.filter((p) => p.price <= maxNum);
 
   out.sort((a, b) => {
     switch (sort) {
-      case 'newest':     return b.createdAt - a.createdAt;
-      case 'oldest':     return a.createdAt - b.createdAt;
-      case 'price-asc':  return a.price - b.price;
-      case 'price-desc': return b.price - a.price;
-      case 'name-asc':   return a.name.localeCompare(b.name);
-      case 'name-desc':  return b.name.localeCompare(a.name);
-      case 'most-sold':  return b.totalSold - a.totalSold;
-      case 'least-sold': return a.totalSold - b.totalSold;
-      default:           return 0;
+      case 'newest':
+        return b.createdAt - a.createdAt;
+      case 'oldest':
+        return a.createdAt - b.createdAt;
+      case 'price-asc':
+        return a.price - b.price;
+      case 'price-desc':
+        return b.price - a.price;
+      case 'name-asc':
+        return a.name.localeCompare(b.name);
+      case 'name-desc':
+        return b.name.localeCompare(a.name);
+      case 'most-sold':
+        return b.totalSold - a.totalSold;
+      case 'least-sold':
+        return a.totalSold - b.totalSold;
+      default:
+        return 0;
     }
   });
 
@@ -155,8 +235,20 @@ function applyFiltersAndSort(
 }
 
 function exportToCSV(products: AdminProduct[]) {
-  const headers = ['SKU', 'Name', 'Category', 'Scent Family', 'Status', 'Stock', 'Price (₦)', 'Sizes', 'Rating', 'Reviews', 'Created'];
-  const rows    = products.map(p => [
+  const headers = [
+    'SKU',
+    'Name',
+    'Category',
+    'Scent Family',
+    'Status',
+    'Stock',
+    'Price (₦)',
+    'Sizes',
+    'Rating',
+    'Reviews',
+    'Created',
+  ];
+  const rows = products.map((p) => [
     p.sku,
     `"${p.name}"`,
     p.category,
@@ -169,11 +261,11 @@ function exportToCSV(products: AdminProduct[]) {
     p.reviewCount,
     new Date(p.createdAt * 1000).toLocaleDateString('en-NG'),
   ]);
-  const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), {
-    href:     url,
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), {
+    href: url,
     download: `aurafumeng-products-${Date.now()}.csv`,
   });
   a.click();
@@ -188,20 +280,21 @@ function FilterDropdown({
   options,
   onChange,
 }: {
-  label:    string;
-  value:    string;
-  options:  readonly string[];
+  label: string;
+  value: string;
+  options: readonly string[];
   onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref             = useRef<HTMLDivElement>(null);
-  const active          = value !== 'All';
-  const displayLabel    = active ? `${label}: ${value}` : label;
+  const ref = useRef<HTMLDivElement>(null);
+  const active = value !== 'All';
+  const displayLabel = active ? `${label}: ${value}` : label;
 
   useEffect(() => {
     if (!open) return;
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
@@ -210,12 +303,14 @@ function FilterDropdown({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 h-8 px-3 text-[0.56rem] tracking-[0.10em] transition-colors duration-150"
         style={{
-          border:     `1px solid ${active ? 'rgba(180,130,60,0.30)' : 'rgba(255,255,255,0.08)'}`,
-          background: active ? 'rgba(180,130,60,0.08)' : 'rgba(255,255,255,0.02)',
-          color:      active ? GOLD : 'rgba(255,255,255,0.45)',
+          border: `1px solid ${active ? 'rgba(180,130,60,0.30)' : 'rgba(255,255,255,0.08)'}`,
+          background: active
+            ? 'rgba(180,130,60,0.08)'
+            : 'rgba(255,255,255,0.02)',
+          color: active ? GOLD : 'rgba(255,255,255,0.45)',
         }}
       >
         <span>{displayLabel}</span>
@@ -223,7 +318,7 @@ function FilterDropdown({
           size={11}
           strokeWidth={2}
           style={{
-            transform:  open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s',
             flexShrink: 0,
           }}
@@ -234,37 +329,43 @@ function FilterDropdown({
         {open && (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0,  scale: 1    }}
-            exit={{    opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.12 }}
             className="absolute top-[calc(100%+4px)] left-0 z-50 min-w-[140px] py-1"
             style={{
               background: '#1E1E1E',
-              border:     '1px solid rgba(255,255,255,0.08)',
-              boxShadow:  '0 8px 24px rgba(0,0,0,0.55)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.55)',
             }}
           >
-            {options.map(opt => {
+            {options.map((opt) => {
               const selected = opt === value;
               return (
                 <button
                   key={opt}
-                  onClick={() => { onChange(opt); setOpen(false); }}
+                  onClick={() => {
+                    onChange(opt);
+                    setOpen(false);
+                  }}
                   className="w-full flex items-center gap-2 px-3 py-[7px] text-left text-[0.56rem] tracking-[0.08em] transition-colors duration-100"
                   style={{
-                    color:      selected ? GOLD : 'rgba(255,255,255,0.52)',
-                    background: selected ? 'rgba(180,130,60,0.08)' : 'transparent',
+                    color: selected ? GOLD : 'rgba(255,255,255,0.52)',
+                    background: selected
+                      ? 'rgba(180,130,60,0.08)'
+                      : 'transparent',
                   }}
-                  onMouseEnter={e => {
+                  onMouseEnter={(e) => {
                     if (!selected) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                      e.currentTarget.style.color      = 'rgba(255,255,255,0.78)';
+                      e.currentTarget.style.background =
+                        'rgba(255,255,255,0.04)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.78)';
                     }
                   }}
-                  onMouseLeave={e => {
+                  onMouseLeave={(e) => {
                     if (!selected) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color      = 'rgba(255,255,255,0.52)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.52)';
                     }
                   }}
                 >
@@ -291,17 +392,19 @@ function SortDropdown({
   value,
   onChange,
 }: {
-  value:    SortKey;
+  value: SortKey;
   onChange: (v: SortKey) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref             = useRef<HTMLDivElement>(null);
-  const currentLabel    = SORT_OPTIONS.find(o => o.value === value)?.label ?? 'Sort';
+  const ref = useRef<HTMLDivElement>(null);
+  const currentLabel =
+    SORT_OPTIONS.find((o) => o.value === value)?.label ?? 'Sort';
 
   useEffect(() => {
     if (!open) return;
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
@@ -310,12 +413,12 @@ function SortDropdown({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 h-8 px-3 text-[0.56rem] tracking-[0.10em] transition-colors duration-150"
         style={{
-          border:     '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.08)',
           background: 'rgba(255,255,255,0.02)',
-          color:      'rgba(255,255,255,0.45)',
+          color: 'rgba(255,255,255,0.45)',
         }}
       >
         <span>{currentLabel}</span>
@@ -323,7 +426,7 @@ function SortDropdown({
           size={11}
           strokeWidth={2}
           style={{
-            transform:  open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s',
             flexShrink: 0,
           }}
@@ -334,37 +437,43 @@ function SortDropdown({
         {open && (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0,  scale: 1    }}
-            exit={{    opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.12 }}
             className="absolute top-[calc(100%+4px)] right-0 z-50 min-w-[170px] py-1"
             style={{
               background: '#1E1E1E',
-              border:     '1px solid rgba(255,255,255,0.08)',
-              boxShadow:  '0 8px 24px rgba(0,0,0,0.55)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.55)',
             }}
           >
-            {SORT_OPTIONS.map(opt => {
+            {SORT_OPTIONS.map((opt) => {
               const selected = opt.value === value;
               return (
                 <button
                   key={opt.value}
-                  onClick={() => { onChange(opt.value); setOpen(false); }}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
                   className="w-full flex items-center gap-2 px-3 py-[7px] text-left text-[0.56rem] tracking-[0.08em] transition-colors duration-100"
                   style={{
-                    color:      selected ? GOLD : 'rgba(255,255,255,0.52)',
-                    background: selected ? 'rgba(180,130,60,0.08)' : 'transparent',
+                    color: selected ? GOLD : 'rgba(255,255,255,0.52)',
+                    background: selected
+                      ? 'rgba(180,130,60,0.08)'
+                      : 'transparent',
                   }}
-                  onMouseEnter={e => {
+                  onMouseEnter={(e) => {
                     if (!selected) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                      e.currentTarget.style.color      = 'rgba(255,255,255,0.78)';
+                      e.currentTarget.style.background =
+                        'rgba(255,255,255,0.04)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.78)';
                     }
                   }}
-                  onMouseLeave={e => {
+                  onMouseLeave={(e) => {
                     if (!selected) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color      = 'rgba(255,255,255,0.52)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.52)';
                     }
                   }}
                 >
@@ -394,26 +503,29 @@ function HeaderButton({
   onClick,
   href,
 }: {
-  icon:     React.ReactNode;
-  label:    string;
-  accent?:  boolean;
+  icon: React.ReactNode;
+  label: string;
+  accent?: boolean;
   onClick?: () => void;
-  href?:    string;
+  href?: string;
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const cls = 'flex items-center gap-1.5 h-8 px-4 text-[0.54rem] tracking-[0.12em] uppercase transition-colors duration-150';
+  const cls =
+    'flex items-center gap-1.5 h-8 px-4 text-[0.54rem] tracking-[0.12em] uppercase transition-colors duration-150';
 
   const style = accent
     ? {
         background: hovered ? 'rgba(180,130,60,0.22)' : 'rgba(180,130,60,0.12)',
-        color:      GOLD,
-        border:     `1px solid ${hovered ? 'rgba(180,130,60,0.45)' : 'rgba(180,130,60,0.28)'}`,
+        color: GOLD,
+        border: `1px solid ${hovered ? 'rgba(180,130,60,0.45)' : 'rgba(180,130,60,0.28)'}`,
       }
     : {
-        background: hovered ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
-        color:      hovered ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.38)',
-        border:     `1px solid ${hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
+        background: hovered
+          ? 'rgba(255,255,255,0.05)'
+          : 'rgba(255,255,255,0.02)',
+        color: hovered ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.38)',
+        border: `1px solid ${hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
       };
 
   const handlers = {
@@ -424,14 +536,16 @@ function HeaderButton({
   if (href) {
     return (
       <Link href={href} className={cls} style={style} {...handlers}>
-        {icon}{label}
+        {icon}
+        {label}
       </Link>
     );
   }
 
   return (
     <button onClick={onClick} className={cls} style={style} {...handlers}>
-      {icon}{label}
+      {icon}
+      {label}
     </button>
   );
 }
@@ -441,21 +555,21 @@ function HeaderButton({
 function StatusPill({ status }: { status: AdminProductStatus }) {
   const cfg = {
     published: {
-      label:  'Published',
-      bg:     'rgba(34,197,94,0.09)',
-      color:  'rgba(74,222,128,0.88)',
+      label: 'Published',
+      bg: 'rgba(34,197,94,0.09)',
+      color: 'rgba(74,222,128,0.88)',
       border: 'rgba(34,197,94,0.18)',
     },
     draft: {
-      label:  'Draft',
-      bg:     'rgba(255,255,255,0.04)',
-      color:  'rgba(255,255,255,0.35)',
+      label: 'Draft',
+      bg: 'rgba(255,255,255,0.04)',
+      color: 'rgba(255,255,255,0.35)',
       border: 'rgba(255,255,255,0.08)',
     },
     archived: {
-      label:  'Archived',
-      bg:     'rgba(239,68,68,0.08)',
-      color:  'rgba(239,68,68,0.72)',
+      label: 'Archived',
+      bg: 'rgba(239,68,68,0.08)',
+      color: 'rgba(239,68,68,0.72)',
       border: 'rgba(239,68,68,0.18)',
     },
   }[status];
@@ -463,7 +577,11 @@ function StatusPill({ status }: { status: AdminProductStatus }) {
   return (
     <span
       className="inline-flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
-      style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+      style={{
+        background: cfg.bg,
+        color: cfg.color,
+        border: `1px solid ${cfg.border}`,
+      }}
     >
       {cfg.label}
     </span>
@@ -475,21 +593,21 @@ function StatusPill({ status }: { status: AdminProductStatus }) {
 function StockPill({ status }: { status: StockStatus }) {
   const cfg = {
     'in-stock': {
-      label:  'In Stock',
-      bg:     'rgba(34,197,94,0.07)',
-      color:  'rgba(74,222,128,0.78)',
+      label: 'In Stock',
+      bg: 'rgba(34,197,94,0.07)',
+      color: 'rgba(74,222,128,0.78)',
       border: 'rgba(34,197,94,0.15)',
     },
     'low-stock': {
-      label:  'Low Stock',
-      bg:     'rgba(234,179,8,0.09)',
-      color:  'rgba(250,204,21,0.82)',
+      label: 'Low Stock',
+      bg: 'rgba(234,179,8,0.09)',
+      color: 'rgba(250,204,21,0.82)',
       border: 'rgba(234,179,8,0.20)',
     },
     'out-of-stock': {
-      label:  'Out of Stock',
-      bg:     'rgba(239,68,68,0.08)',
-      color:  'rgba(239,68,68,0.70)',
+      label: 'Out of Stock',
+      bg: 'rgba(239,68,68,0.08)',
+      color: 'rgba(239,68,68,0.70)',
       border: 'rgba(239,68,68,0.16)',
     },
   }[status];
@@ -497,7 +615,11 @@ function StockPill({ status }: { status: StockStatus }) {
   return (
     <span
       className="inline-flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
-      style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+      style={{
+        background: cfg.bg,
+        color: cfg.color,
+        border: `1px solid ${cfg.border}`,
+      }}
     >
       {cfg.label}
     </span>
@@ -513,44 +635,62 @@ function RowAction({
   danger,
   onClick,
 }: {
-  icon:    React.ReactNode;
-  label:   string;
-  href?:   string;
+  icon: React.ReactNode;
+  label: string;
+  href?: string;
   danger?: boolean;
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
   const style = {
-    display:        'flex',
-    alignItems:     'center',
+    display: 'flex',
+    alignItems: 'center',
     justifyContent: 'center',
-    width:          '28px',
-    height:         '28px',
-    color:          hovered
-      ? (danger ? 'rgba(239,68,68,0.88)' : 'rgba(255,255,255,0.78)')
-      : (danger ? 'rgba(239,68,68,0.50)' : 'rgba(255,255,255,0.30)'),
+    width: '28px',
+    height: '28px',
+    color: hovered
+      ? danger
+        ? 'rgba(239,68,68,0.88)'
+        : 'rgba(255,255,255,0.78)'
+      : danger
+        ? 'rgba(239,68,68,0.50)'
+        : 'rgba(255,255,255,0.30)',
     background: hovered
-      ? (danger ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.04)')
+      ? danger
+        ? 'rgba(239,68,68,0.06)'
+        : 'rgba(255,255,255,0.04)'
       : 'transparent',
-    border: `1px solid ${hovered
-      ? (danger ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.10)')
-      : 'rgba(255,255,255,0.06)'}`,
+    border: `1px solid ${
+      hovered
+        ? danger
+          ? 'rgba(239,68,68,0.18)'
+          : 'rgba(255,255,255,0.10)'
+        : 'rgba(255,255,255,0.06)'
+    }`,
     transition: 'color 0.12s, background 0.12s, border-color 0.12s',
-    cursor:     'pointer',
+    cursor: 'pointer',
   } as React.CSSProperties;
 
   const handlers = {
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
-    title:        label,
+    title: label,
   };
 
   if (href) {
-    return <Link href={href} style={style} {...handlers}>{icon}</Link>;
+    return (
+      <Link href={href} style={style} {...handlers}>
+        {icon}
+      </Link>
+    );
   }
 
-  return <button onClick={onClick} style={style} {...handlers}>{icon}</button>;
+  return (
+    <button onClick={onClick} style={style} {...handlers}>
+      {icon}
+    </button>
+  );
 }
 
 // ── Product Row ────────────────────────────────────────────────────────────────
@@ -563,26 +703,26 @@ function ProductRow({ product }: { product: AdminProduct }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background:   hovered ? 'rgba(255,255,255,0.018)' : 'transparent',
+        background: hovered ? 'rgba(255,255,255,0.018)' : 'transparent',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
-        transition:   'background 0.10s',
+        transition: 'background 0.10s',
       }}
     >
       {/* Product — image + name + SKU */}
       <td className="px-5 py-3">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 shrink-0 overflow-hidden"
+            className="relative w-10 h-10 shrink-0 overflow-hidden"
             style={{
               background: 'rgba(255,255,255,0.03)',
-              border:     '1px solid rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.06)',
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={product.image}
               alt={product.name}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           </div>
           <div>
@@ -681,10 +821,10 @@ function PaginationBtn({
   disabled,
   onClick,
 }: {
-  children:  React.ReactNode;
-  active?:   boolean;
+  children: React.ReactNode;
+  active?: boolean;
   disabled?: boolean;
-  onClick:   () => void;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -692,13 +832,15 @@ function PaginationBtn({
       disabled={disabled}
       className="flex items-center gap-0.5 h-7 px-2.5 transition-colors duration-100"
       style={{
-        background:  active   ? 'rgba(180,130,60,0.14)' : 'transparent',
-        color:       active   ? GOLD
-                   : disabled ? 'rgba(255,255,255,0.12)'
-                   :            'rgba(255,255,255,0.38)',
-        border:      `1px solid ${active ? 'rgba(180,130,60,0.28)' : 'rgba(255,255,255,0.06)'}`,
-        cursor:      disabled ? 'not-allowed' : 'pointer',
-        marginLeft:  '-1px',
+        background: active ? 'rgba(180,130,60,0.14)' : 'transparent',
+        color: active
+          ? GOLD
+          : disabled
+            ? 'rgba(255,255,255,0.12)'
+            : 'rgba(255,255,255,0.38)',
+        border: `1px solid ${active ? 'rgba(180,130,60,0.28)' : 'rgba(255,255,255,0.06)'}`,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        marginLeft: '-1px',
       }}
     >
       {children}
@@ -716,17 +858,17 @@ function Pagination({
   onPage,
   onPageSize,
 }: {
-  page:       number;
+  page: number;
   totalPages: number;
-  pageSize:   number;
+  pageSize: number;
   totalItems: number;
-  onPage:     (p: number) => void;
+  onPage: (p: number) => void;
   onPageSize: (s: number) => void;
 }) {
   const [jumpValue, setJumpValue] = useState('');
 
   const start = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end   = Math.min(page * pageSize, totalItems);
+  const end = Math.min(page * pageSize, totalItems);
 
   function handleJump(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
@@ -736,9 +878,10 @@ function Pagination({
   }
 
   function getPages(): (number | '...')[] {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (totalPages <= 7)
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     const pages: (number | '...')[] = [];
-    const left  = Math.max(2, page - 1);
+    const left = Math.max(2, page - 1);
     const right = Math.min(totalPages - 1, page + 1);
     pages.push(1);
     if (left > 2) pages.push('...');
@@ -760,22 +903,34 @@ function Pagination({
           style={{ color: 'rgba(255,255,255,0.22)' }}
         >
           Showing{' '}
-          <span style={{ color: 'rgba(255,255,255,0.50)' }}>{start}–{end}</span>
-          {' '}of{' '}
-          <span style={{ color: 'rgba(255,255,255,0.50)' }}>{totalItems}</span>
-          {' '}products
+          <span style={{ color: 'rgba(255,255,255,0.50)' }}>
+            {start}–{end}
+          </span>{' '}
+          of{' '}
+          <span style={{ color: 'rgba(255,255,255,0.50)' }}>{totalItems}</span>{' '}
+          products
         </p>
 
-        <div style={{ display: 'flex', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div
+          style={{
+            display: 'flex',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}
+        >
           {([10, 20, 50] as const).map((size, idx) => (
             <button
               key={size}
-              onClick={() => { onPageSize(size); onPage(1); }}
+              onClick={() => {
+                onPageSize(size);
+                onPage(1);
+              }}
               className="h-6 px-2.5 text-[0.46rem] tracking-[0.10em] transition-colors duration-100"
               style={{
-                background: pageSize === size ? 'rgba(180,130,60,0.12)' : 'transparent',
-                color:      pageSize === size ? GOLD : 'rgba(255,255,255,0.28)',
-                borderLeft: idx > 0 ? '1px solid rgba(255,255,255,0.07)' : undefined,
+                background:
+                  pageSize === size ? 'rgba(180,130,60,0.12)' : 'transparent',
+                color: pageSize === size ? GOLD : 'rgba(255,255,255,0.28)',
+                borderLeft:
+                  idx > 0 ? '1px solid rgba(255,255,255,0.07)' : undefined,
               }}
             >
               {size}
@@ -788,32 +943,40 @@ function Pagination({
       <div className="flex items-center gap-3 flex-wrap">
         <div style={{ display: 'flex' }}>
           <PaginationBtn disabled={page === 1} onClick={() => onPage(page - 1)}>
-            <ChevronLeft  size={11} strokeWidth={2} />
+            <ChevronLeft size={11} strokeWidth={2} />
             <span className="text-[0.46rem] tracking-[0.10em]">Prev</span>
           </PaginationBtn>
 
           {getPages().map((p, i) =>
-            p === '...'
-              ? (
-                <span
-                  key={`dots-${i}`}
-                  className="flex items-center justify-center w-7 h-7 text-[0.46rem]"
-                  style={{
-                    color:      'rgba(255,255,255,0.20)',
-                    border:     '1px solid rgba(255,255,255,0.06)',
-                    marginLeft: '-1px',
-                  }}
-                >
-                  …
+            p === '...' ? (
+              <span
+                key={`dots-${i}`}
+                className="flex items-center justify-center w-7 h-7 text-[0.46rem]"
+                style={{
+                  color: 'rgba(255,255,255,0.20)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  marginLeft: '-1px',
+                }}
+              >
+                …
+              </span>
+            ) : (
+              <PaginationBtn
+                key={p}
+                active={p === page}
+                onClick={() => onPage(p as number)}
+              >
+                <span className="text-[0.48rem] tracking-[0.06em] tabular-nums">
+                  {p}
                 </span>
-              ) : (
-                <PaginationBtn key={p} active={p === page} onClick={() => onPage(p as number)}>
-                  <span className="text-[0.48rem] tracking-[0.06em] tabular-nums">{p}</span>
-                </PaginationBtn>
-              )
+              </PaginationBtn>
+            ),
           )}
 
-          <PaginationBtn disabled={page === totalPages} onClick={() => onPage(page + 1)}>
+          <PaginationBtn
+            disabled={page === totalPages}
+            onClick={() => onPage(page + 1)}
+          >
             <span className="text-[0.46rem] tracking-[0.10em]">Next</span>
             <ChevronRight size={11} strokeWidth={2} />
           </PaginationBtn>
@@ -832,13 +995,13 @@ function Pagination({
             min={1}
             max={totalPages}
             value={jumpValue}
-            onChange={e => setJumpValue(e.target.value)}
+            onChange={(e) => setJumpValue(e.target.value)}
             onKeyDown={handleJump}
             placeholder="—"
             className="w-10 h-6 bg-transparent text-center text-[0.50rem] tracking-[0.06em] outline-none tabular-nums"
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
-              color:  'rgba(255,255,255,0.55)',
+              color: 'rgba(255,255,255,0.55)',
             }}
           />
           <span
@@ -855,39 +1018,46 @@ function Pagination({
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-const ALL_ADMIN_PRODUCTS = buildAdminProducts();
-
 export default function AdminProductsPage() {
   const router = useRouter();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [adminUser,   setAdminUser]   = useState<AdminUser | null>(null);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   // Filter state
-  const [search,   setSearch]   = useState('');
+  const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
-  const [status,   setStatus]   = useState('All');
-  const [stock,    setStock]    = useState('All');
+  const [status, setStatus] = useState('All');
+  const [stock, setStock] = useState('All');
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
-  const [sort,     setSort]     = useState<SortKey>('newest');
+  const [sort, setSort] = useState<SortKey>('newest');
   const [pageSize, setPageSize] = useState(20);
-  const [page,     setPage]     = useState(1);
+  const [page, setPage] = useState(1);
 
   const importRef = useRef<HTMLInputElement>(null);
 
   const filtered = applyFiltersAndSort(
-    ALL_ADMIN_PRODUCTS, search, category, status, stock, priceMin, priceMax, sort,
+    products,
+    search,
+    category,
+    status,
+    stock,
+    priceMin,
+    priceMax,
+    sort,
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const activeFilterCount = [
     category !== 'All',
-    status   !== 'All',
-    stock    !== 'All',
+    status !== 'All',
+    stock !== 'All',
     priceMin !== '',
     priceMax !== '',
   ].filter(Boolean).length;
@@ -903,18 +1073,48 @@ export default function AdminProductsPage() {
           router.push('/admin/login');
           return;
         }
-        const { data } = await res.json() as { data?: AdminUser };
+        const { data } = (await res.json()) as { data?: AdminUser };
         if (!cancelled && data) setAdminUser(data);
       } catch {
-        /* ignore — page still renders with static data */
+        /* ignore */
       } finally {
         if (!cancelled) setAuthLoading(false);
       }
     }
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
+
+  // Fetch products from DB
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchProducts() {
+      setProductsLoading(true);
+      try {
+        const res = await fetch('/api/admin/products?pageSize=200');
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          data?: { products: ApiProduct[]; total: number };
+        };
+        if (!cancelled && json.data) {
+          setProducts(json.data.products.map(mapApiProduct));
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setProductsLoading(false);
+      }
+    }
+
+    fetchProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Reset to page 1 whenever the filtered result set changes
   useEffect(() => {
@@ -937,13 +1137,17 @@ export default function AdminProductsPage() {
     e.target.value = '';
   }
 
-  const adminFullName  = adminUser ? `${adminUser.firstName} ${adminUser.lastName}`     : '—';
-  const adminShortName = adminUser ? `${adminUser.firstName} ${adminUser.lastName[0]}.` : '—';
-  const adminRoleLabel = adminUser?.role === 'superadmin' ? 'Super Admin' : 'Admin';
+  const adminFullName = adminUser
+    ? `${adminUser.firstName} ${adminUser.lastName}`
+    : '—';
+  const adminShortName = adminUser
+    ? `${adminUser.firstName} ${adminUser.lastName[0]}.`
+    : '—';
+  const adminRoleLabel =
+    adminUser?.role === 'superadmin' ? 'Super Admin' : 'Admin';
 
   return (
     <div className="min-h-screen" style={{ background: '#0F0F0F' }}>
-
       {/* Sidebar */}
       <AdminSidebar
         adminName={adminFullName}
@@ -955,22 +1159,19 @@ export default function AdminProductsPage() {
 
       {/* Content — offset for desktop sidebar */}
       <div className="lg:pl-55 flex flex-col min-h-screen">
-
         {/* Top nav */}
         <AdminTopNav
           pageTitle="Products Management"
           adminName={adminShortName}
           avatarUrl={adminUser?.avatar}
-          onMenuToggle={() => setSidebarOpen(o => !o)}
+          onMenuToggle={() => setSidebarOpen((o) => !o)}
         />
 
         {/* Main */}
         <main className="flex-1 pt-14">
           <div className="p-5 md:p-7 space-y-5">
-
             {/* ── Page Header ─────────────────────────────────────────────────── */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-
               {/* Title + count */}
               <div className="space-y-1 pt-1">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -984,11 +1185,11 @@ export default function AdminProductsPage() {
                     className="flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
                     style={{
                       background: 'rgba(255,255,255,0.04)',
-                      color:      'rgba(255,255,255,0.28)',
-                      border:     '1px solid rgba(255,255,255,0.07)',
+                      color: 'rgba(255,255,255,0.28)',
+                      border: '1px solid rgba(255,255,255,0.07)',
                     }}
                   >
-                    {ALL_ADMIN_PRODUCTS.length} Products
+                    {products.length} Products
                   </span>
                 </div>
                 <p
@@ -1038,16 +1239,19 @@ export default function AdminProductsPage() {
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by product name, SKU, or category..."
                 className="w-full h-10 pl-9 pr-9 text-[0.58rem] tracking-[0.06em] outline-none transition-all duration-150"
                 style={{
                   background: '#1A1A1A',
-                  border:     '1px solid rgba(255,255,255,0.06)',
-                  color:      'rgba(255,255,255,0.78)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'rgba(255,255,255,0.78)',
                 }}
-                onFocus={e  => { e.currentTarget.style.border = '1px solid rgba(255,255,255,0.14)'; }}
-                onBlur={e   => {
+                onFocus={(e) => {
+                  e.currentTarget.style.border =
+                    '1px solid rgba(255,255,255,0.14)';
+                }}
+                onBlur={(e) => {
                   e.currentTarget.style.border = search
                     ? '1px solid rgba(180,130,60,0.22)'
                     : '1px solid rgba(255,255,255,0.06)';
@@ -1058,13 +1262,17 @@ export default function AdminProductsPage() {
                   <motion.button
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{    opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.10 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.1 }}
                     onClick={() => setSearch('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5"
                     style={{ color: 'rgba(255,255,255,0.28)' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.62)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.62)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
+                    }}
                     aria-label="Clear search"
                   >
                     <X size={12} strokeWidth={2} />
@@ -1075,7 +1283,6 @@ export default function AdminProductsPage() {
 
             {/* ── Filter & Sort Bar ────────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-2">
-
               {/* Filter dropdowns */}
               <FilterDropdown
                 label="Category"
@@ -1100,7 +1307,7 @@ export default function AdminProductsPage() {
               <div
                 className="flex items-center gap-1 h-8 px-3"
                 style={{
-                  border:     '1px solid rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.08)',
                   background: 'rgba(255,255,255,0.02)',
                 }}
               >
@@ -1113,7 +1320,7 @@ export default function AdminProductsPage() {
                 <input
                   type="number"
                   value={priceMin}
-                  onChange={e => setPriceMin(e.target.value)}
+                  onChange={(e) => setPriceMin(e.target.value)}
                   placeholder="Min"
                   className="w-14 bg-transparent outline-none text-[0.56rem] tracking-[0.06em] tabular-nums"
                   style={{ color: 'rgba(255,255,255,0.55)' }}
@@ -1127,7 +1334,7 @@ export default function AdminProductsPage() {
                 <input
                   type="number"
                   value={priceMax}
-                  onChange={e => setPriceMax(e.target.value)}
+                  onChange={(e) => setPriceMax(e.target.value)}
                   placeholder="Max"
                   className="w-14 bg-transparent outline-none text-[0.56rem] tracking-[0.06em] tabular-nums"
                   style={{ color: 'rgba(255,255,255,0.55)' }}
@@ -1152,7 +1359,7 @@ export default function AdminProductsPage() {
                   <motion.div
                     initial={{ opacity: 0, x: 8 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{    opacity: 0, x: 8 }}
+                    exit={{ opacity: 0, x: 8 }}
                     transition={{ duration: 0.15 }}
                     className="flex items-center gap-2"
                   >
@@ -1160,27 +1367,30 @@ export default function AdminProductsPage() {
                       className="flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] font-semibold uppercase"
                       style={{
                         background: 'rgba(180,130,60,0.10)',
-                        color:      GOLD,
-                        border:     '1px solid rgba(180,130,60,0.22)',
+                        color: GOLD,
+                        border: '1px solid rgba(180,130,60,0.22)',
                       }}
                     >
-                      {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                      {activeFilterCount} filter
+                      {activeFilterCount !== 1 ? 's' : ''} active
                     </span>
                     <button
                       onClick={clearFilters}
                       className="flex items-center gap-1.5 h-7 px-3 text-[0.52rem] tracking-[0.10em] transition-colors duration-150"
                       style={{
-                        color:      'rgba(255,255,255,0.32)',
-                        border:     '1px solid rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.32)',
+                        border: '1px solid rgba(255,255,255,0.06)',
                         background: 'rgba(255,255,255,0.02)',
                       }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.color  = 'rgba(255,255,255,0.62)';
-                        e.currentTarget.style.border = '1px solid rgba(255,255,255,0.12)';
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = 'rgba(255,255,255,0.62)';
+                        e.currentTarget.style.border =
+                          '1px solid rgba(255,255,255,0.12)';
                       }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.color  = 'rgba(255,255,255,0.32)';
-                        e.currentTarget.style.border = '1px solid rgba(255,255,255,0.06)';
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'rgba(255,255,255,0.32)';
+                        e.currentTarget.style.border =
+                          '1px solid rgba(255,255,255,0.06)';
                       }}
                     >
                       <X size={10} strokeWidth={2.2} />
@@ -1194,7 +1404,7 @@ export default function AdminProductsPage() {
             {/* ── Products Table ───────────────────────────────────────────────── */}
             <div
               style={{
-                border:     '1px solid rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.06)',
                 background: '#141414',
               }}
             >
@@ -1210,11 +1420,14 @@ export default function AdminProductsPage() {
                 >
                   Showing{' '}
                   <span style={{ color: 'rgba(255,255,255,0.50)' }}>
-                    {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)}
-                  </span>
-                  {' '}of{' '}
-                  <span style={{ color: 'rgba(255,255,255,0.50)' }}>{filtered.length}</span>
-                  {' '}products
+                    {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–
+                    {Math.min(page * pageSize, filtered.length)}
+                  </span>{' '}
+                  of{' '}
+                  <span style={{ color: 'rgba(255,255,255,0.50)' }}>
+                    {filtered.length}
+                  </span>{' '}
+                  products
                 </p>
 
                 {/* Items per page */}
@@ -1225,16 +1438,28 @@ export default function AdminProductsPage() {
                   >
                     Per page
                   </span>
-                  <div style={{ display: 'flex', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                    }}
+                  >
                     {([10, 20, 50] as const).map((size, idx) => (
                       <button
                         key={size}
                         onClick={() => setPageSize(size)}
                         className="h-6 px-2.5 text-[0.46rem] tracking-[0.10em] transition-colors duration-100"
                         style={{
-                          background: pageSize === size ? 'rgba(180,130,60,0.12)' : 'transparent',
-                          color:      pageSize === size ? GOLD : 'rgba(255,255,255,0.28)',
-                          borderLeft: idx > 0 ? '1px solid rgba(255,255,255,0.07)' : undefined,
+                          background:
+                            pageSize === size
+                              ? 'rgba(180,130,60,0.12)'
+                              : 'transparent',
+                          color:
+                            pageSize === size ? GOLD : 'rgba(255,255,255,0.28)',
+                          borderLeft:
+                            idx > 0
+                              ? '1px solid rgba(255,255,255,0.07)'
+                              : undefined,
                         }}
                       >
                         {size}
@@ -1248,16 +1473,20 @@ export default function AdminProductsPage() {
               <div className="overflow-x-auto" style={{ overflowX: 'auto' }}>
                 <table className="w-full">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr
+                      style={{
+                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                      }}
+                    >
                       {[
-                        { label: 'Product',  cls: 'px-5' },
+                        { label: 'Product', cls: 'px-5' },
                         { label: 'Category', cls: 'px-4' },
-                        { label: 'Status',   cls: 'px-4' },
-                        { label: 'Stock',    cls: 'px-4' },
-                        { label: 'Price',    cls: 'px-4' },
-                        { label: 'Sold',     cls: 'px-4' },
-                        { label: 'Actions',  cls: 'px-4' },
-                      ].map(col => (
+                        { label: 'Status', cls: 'px-4' },
+                        { label: 'Stock', cls: 'px-4' },
+                        { label: 'Price', cls: 'px-4' },
+                        { label: 'Sold', cls: 'px-4' },
+                        { label: 'Actions', cls: 'px-4' },
+                      ].map((col) => (
                         <th
                           key={col.label}
                           className={`${col.cls} py-3 text-left text-[0.46rem] tracking-[0.18em] uppercase font-semibold`}
@@ -1269,7 +1498,18 @@ export default function AdminProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.length === 0 ? (
+                    {productsLoading ? (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-14 text-center">
+                          <Loader2
+                            size={18}
+                            strokeWidth={1.8}
+                            className="animate-spin inline-block"
+                            style={{ color: GOLD }}
+                          />
+                        </td>
+                      </tr>
+                    ) : filtered.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-5 py-14 text-center">
                           <p
@@ -1280,7 +1520,10 @@ export default function AdminProductsPage() {
                           </p>
                           {(search || activeFilterCount > 0) && (
                             <button
-                              onClick={() => { setSearch(''); clearFilters(); }}
+                              onClick={() => {
+                                setSearch('');
+                                clearFilters();
+                              }}
                               className="mt-3 text-[0.52rem] tracking-[0.12em] underline underline-offset-2"
                               style={{ color: 'rgba(180,130,60,0.60)' }}
                             >
@@ -1290,7 +1533,7 @@ export default function AdminProductsPage() {
                         </td>
                       </tr>
                     ) : (
-                      paginated.map(product => (
+                      paginated.map((product) => (
                         <ProductRow key={product.id} product={product} />
                       ))
                     )}
@@ -1310,7 +1553,6 @@ export default function AdminProductsPage() {
                 />
               )}
             </div>
-
           </div>
         </main>
       </div>

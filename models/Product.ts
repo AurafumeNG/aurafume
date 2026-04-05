@@ -198,7 +198,6 @@ const ProductSchema = new Schema<IProduct>(
 
 // ── Indexes ────────────────────────────────────────────────────────────────────
 
-ProductSchema.index({ slug:      1 });
 ProductSchema.index({ status:    1 });
 ProductSchema.index({ createdAt: -1 });
 ProductSchema.index({ name: 'text', 'variants.sku': 'text' });
