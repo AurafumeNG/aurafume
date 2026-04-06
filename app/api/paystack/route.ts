@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
               status: 'confirmed',
             },
           },
-          { new: true },
+          { returnDocument: 'after' },
         );
 
         if (!updated) {
@@ -89,7 +89,37 @@ export async function POST(req: NextRequest) {
       break;
     }
 
-    case 'transfer.success':
+    case 'transfer.success': {
+      const { reference, amount, paid_at } = event.data;
+      console.log('[Paystack] transfer.success — ref:', reference, '— amount (kobo):', amount);
+
+      try {
+        await connectDB();
+
+        const updated = await Order.findOneAndUpdate(
+          { 'payment.paystackRef': reference },
+          {
+            $set: {
+              'payment.status': 'paid',
+              'payment.paidAt': paid_at ? new Date(paid_at) : new Date(),
+              'payment.amountPaid': Math.round(amount / 100),
+              status: 'confirmed',
+            },
+          },
+          { returnDocument: 'after' },
+        );
+
+        if (!updated) {
+          console.warn('[Paystack Webhook] No order found for ref:', reference);
+        } else {
+          console.log('[Paystack Webhook] Order confirmed via transfer:', updated.orderNumber);
+        }
+      } catch (err) {
+        console.error('[Paystack Webhook] DB update failed:', err);
+      }
+      break;
+    }
+
     case 'transfer.failed':
     case 'transfer.reversed':
       console.log('[Paystack]', event.event, '— ref:', event.data.reference);

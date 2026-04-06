@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter }                                 from 'next/navigation';
+import Link                                          from 'next/link';
 import {
   Download,
   Printer,
@@ -14,6 +15,7 @@ import {
   CheckSquare,
   Square,
   Eye,
+  FileText,
   RefreshCw,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -457,20 +459,93 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   );
 }
 
+// ── Admin Invoice HTML ─────────────────────────────────────────────────────────
+
+function generateAdminInvoiceHTML(order: AdminOrder): string {
+  const date = new Date(order.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const rows = order.items
+    .map((i) => `<tr>
+      <td style="padding:8px 0;border-bottom:1px solid #222;">${i.name} (${i.size})</td>
+      <td style="padding:8px 0;border-bottom:1px solid #222;text-align:center;">×${i.qty}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #222;text-align:right;">₦${(i.pricePerUnit * i.qty).toLocaleString()}</td>
+    </tr>`)
+    .join('');
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Invoice – ${order.orderNumber}</title><style>
+  body{margin:0;padding:40px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#0a0a0a;color:#f0f0f0;}
+  h1{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:#c5a76d;margin:0 0 40px;}
+  h2{font-size:20px;font-weight:300;letter-spacing:.15em;text-transform:uppercase;margin:0 0 6px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  .muted{color:#666;font-size:11px;letter-spacing:.1em;}
+  .row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;}
+  .total{border-top:1px solid #333;padding-top:10px;font-weight:600;font-size:14px;}
+  @media print{body{background:#fff;color:#111;}h1{color:#b8932a;}}
+</style></head><body>
+<h1>AuraFume</h1>
+<h2>Invoice</h2>
+<p class="muted">Order ${order.orderNumber} &nbsp;·&nbsp; ${date}</p>
+<br>
+<table>
+  <thead><tr>
+    <th style="text-align:left;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Item</th>
+    <th style="text-align:center;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Qty</th>
+    <th style="text-align:right;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Amount</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<br>
+<div class="row"><span class="muted">Subtotal</span><span>₦${order.pricing.subtotal.toLocaleString()}</span></div>
+<div class="row"><span class="muted">Delivery</span><span>₦${order.pricing.deliveryFee.toLocaleString()}</span></div>
+${order.pricing.discount > 0 ? `<div class="row"><span class="muted">Discount</span><span>−₦${order.pricing.discount.toLocaleString()}</span></div>` : ''}
+<div class="row total"><span>Total</span><span>₦${order.pricing.total.toLocaleString()}</span></div>
+<br><br><p class="muted">AuraFume · Lagos, Nigeria · hello@aurafume.com</p>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+}
+
 // ── Order Row ──────────────────────────────────────────────────────────────────
 
 function OrderRow({
   order,
   selected,
   onToggle,
-  onViewDetail,
+  onStatusChange,
 }: {
-  order:        AdminOrder;
-  selected:     boolean;
-  onToggle:     () => void;
-  onViewDetail: (o: AdminOrder) => void;
+  order:          AdminOrder;
+  selected:       boolean;
+  onToggle:       () => void;
+  onStatusChange: (id: string, status: OrderStatus) => Promise<void>;
 }) {
-  const [hovered, setHovered] = useState(false);
+  const [hovered,        setHovered]        = useState(false);
+  const [statusOpen,     setStatusOpen]     = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const statusRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!statusOpen) return;
+    function handle(e: MouseEvent) {
+      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [statusOpen]);
+
+  async function handleStatusSelect(s: OrderStatus) {
+    setStatusOpen(false);
+    setStatusUpdating(true);
+    await onStatusChange(order._id, s);
+    setStatusUpdating(false);
+  }
+
+  function handleInvoice() {
+    const html = generateAdminInvoiceHTML(order);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  const ALL_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
   const customerName = `${order.contact.firstName} ${order.contact.lastName}`;
   const itemCount    = order.items.reduce((s, i) => s + i.qty, 0);
 
@@ -553,16 +628,67 @@ function OrderRow({
 
       {/* Actions */}
       <td className="px-4 py-3">
-        <button
-          onClick={() => onViewDetail(order)}
-          title="View order details"
-          className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
-          style={{ color: hovered ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.28)', background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${hovered ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.06)'}` }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.72)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
-        >
-          <Eye size={12} strokeWidth={1.8} />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* View — opens order detail page */}
+          <Link
+            href={`/admin/orders/${order._id}`}
+            title="View order detail"
+            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+            style={{ color: 'rgba(255,255,255,0.28)', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.72)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+          >
+            <Eye size={12} strokeWidth={1.8} />
+          </Link>
+
+          {/* Update Status — inline dropdown */}
+          <div className="relative" ref={statusRef}>
+            <button
+              onClick={() => setStatusOpen((o) => !o)}
+              title="Update status"
+              className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+              style={{ color: statusOpen ? GOLD : 'rgba(255,255,255,0.28)', background: statusOpen ? 'rgba(180,130,60,0.08)' : 'transparent', border: `1px solid ${statusOpen ? 'rgba(180,130,60,0.20)' : 'rgba(255,255,255,0.06)'}` }}
+              onMouseEnter={(e) => { if (!statusOpen) { e.currentTarget.style.color = 'rgba(255,255,255,0.72)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; } }}
+              onMouseLeave={(e) => { if (!statusOpen) { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; } }}
+            >
+              {statusUpdating
+                ? <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
+                : <ChevronDown size={11} strokeWidth={1.8} />
+              }
+            </button>
+            {statusOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 z-[100] py-1 min-w-[130px]"
+                style={{ background: '#1C1C1C', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 8px 24px rgba(0,0,0,0.50)' }}
+              >
+                {ALL_STATUSES.filter((s) => s !== order.status).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleStatusSelect(s)}
+                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[0.48rem] tracking-[0.10em] uppercase transition-colors duration-100"
+                    style={{ color: 'rgba(255,255,255,0.45)', background: 'transparent' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.80)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
+                  >
+                    <span style={{ color: GOLD, opacity: 0.7 }}>→</span> {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Invoice — opens print view in new tab */}
+          <button
+            onClick={handleInvoice}
+            title="Open invoice"
+            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+            style={{ color: 'rgba(255,255,255,0.28)', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.72)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+          >
+            <FileText size={12} strokeWidth={1.8} />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -1429,7 +1555,7 @@ export default function AdminOrdersPage() {
                           order={order}
                           selected={selected.has(order._id)}
                           onToggle={() => toggleOne(order._id)}
-                          onViewDetail={setDetailOrder}
+                          onStatusChange={handleStatusChange}
                         />
                       ))
                     )}

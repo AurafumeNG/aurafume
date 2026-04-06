@@ -4,6 +4,34 @@ import Order                        from '@/models/Order';
 import { requireAdmin }             from '@/lib/admin-auth';
 import type { ApiResponse }         from '@/types/auth';
 
+// ── GET — fetch single order ───────────────────────────────────────────────────
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const admin = await requireAdmin();
+  if (!admin) {
+    return NextResponse.json<ApiResponse>({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  try {
+    await connectDB();
+    const order = await Order.findById(id).lean();
+
+    if (!order) {
+      return NextResponse.json<ApiResponse>({ error: 'Order not found.' }, { status: 404 });
+    }
+
+    return NextResponse.json<ApiResponse<unknown>>({ success: true, data: order });
+  } catch (err) {
+    console.error('[api/admin/orders GET]', err);
+    return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
+  }
+}
+
 // ── PATCH — update order status ────────────────────────────────────────────────
 
 export async function PATCH(
@@ -51,6 +79,52 @@ export async function PATCH(
     );
   } catch (err) {
     console.error('[api/admin/orders PATCH]', err);
+    return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
+  }
+}
+
+// ── DELETE — permanently delete order ─────────────────────────────────────────
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const admin = await requireAdmin();
+  if (!admin) {
+    return NextResponse.json<ApiResponse>({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  try {
+    await connectDB();
+    const order = await Order.findById(id).select('status payment').lean() as {
+      status: string;
+      payment: { status: string };
+    } | null;
+
+    if (!order) {
+      return NextResponse.json<ApiResponse>({ error: 'Order not found.' }, { status: 404 });
+    }
+
+    if (order.status !== 'cancelled') {
+      return NextResponse.json<ApiResponse>(
+        { error: 'Only cancelled orders can be deleted.' },
+        { status: 422 },
+      );
+    }
+
+    if (order.payment.status === 'paid') {
+      return NextResponse.json<ApiResponse>(
+        { error: 'Orders with payments cannot be deleted.' },
+        { status: 422 },
+      );
+    }
+
+    await Order.findByIdAndDelete(id);
+    return NextResponse.json<ApiResponse>({ success: true });
+  } catch (err) {
+    console.error('[api/admin/orders DELETE]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
   }
 }
