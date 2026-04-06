@@ -148,6 +148,17 @@ interface ActivityEntry {
   createdAt: string;
 }
 
+interface RefundRecord {
+  id: string;
+  amount: number;
+  type: 'full' | 'partial';
+  method: 'original' | 'store-credit';
+  reason: string;
+  note?: string;
+  processedBy: string;
+  createdAt: string;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatNaira(n: number) {
@@ -187,40 +198,6 @@ function formatTimeShort(iso: string) {
   });
 }
 
-function generateInvoiceHTML(order: OrderDetail): string {
-  const date = formatDateShort(order.createdAt);
-  const rows = order.items
-    .map(
-      (i) => `<tr>
-    <td style="padding:8px 0;border-bottom:1px solid #222;">${i.name} (${i.size})</td>
-    <td style="padding:8px 0;border-bottom:1px solid #222;text-align:center;">×${i.qty}</td>
-    <td style="padding:8px 0;border-bottom:1px solid #222;text-align:right;">₦${(i.pricePerUnit * i.qty).toLocaleString()}</td>
-  </tr>`,
-    )
-    .join('');
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Invoice – ${order.orderNumber}</title>
-<style>body{margin:0;padding:40px;font-family:'Helvetica Neue',sans-serif;background:#0a0a0a;color:#f0f0f0;}
-h1{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:#c5a76d;margin:0 0 40px;}
-h2{font-size:20px;font-weight:300;letter-spacing:.15em;text-transform:uppercase;margin:0 0 6px;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-.muted{color:#666;font-size:11px;letter-spacing:.1em;}
-.row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;}
-.total{border-top:1px solid #333;padding-top:10px;font-weight:600;font-size:14px;}
-@media print{body{background:#fff;color:#111;}h1{color:#b8932a;}}</style></head>
-<body><h1>AuraFume</h1><h2>Invoice</h2>
-<p class="muted">Order ${order.orderNumber} &nbsp;·&nbsp; ${date}</p><br>
-<table><thead><tr>
-<th style="text-align:left;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Item</th>
-<th style="text-align:center;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Qty</th>
-<th style="text-align:right;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Amount</th>
-</tr></thead><tbody>${rows}</tbody></table><br>
-<div class="row"><span class="muted">Subtotal</span><span>₦${order.pricing.subtotal.toLocaleString()}</span></div>
-<div class="row"><span class="muted">Delivery</span><span>₦${order.pricing.deliveryFee.toLocaleString()}</span></div>
-${order.pricing.discount > 0 ? `<div class="row"><span class="muted">Discount (${order.pricing.couponCode ?? ''})</span><span>−₦${order.pricing.discount.toLocaleString()}</span></div>` : ''}
-<div class="row total"><span>Total</span><span>₦${order.pricing.total.toLocaleString()}</span></div>
-<br><br><p class="muted">AuraFume · Lagos, Nigeria · hello@aurafume.com</p>
-<script>window.onload=function(){window.print();}<\/script></body></html>`;
-}
 
 // ── Status config ──────────────────────────────────────────────────────────────
 
@@ -2002,6 +1979,40 @@ function ActivityLog({ order }: { order: OrderDetail }) {
 
 // ── Refund & Cancellation ─────────────────────────────────────────────────────
 
+function RedBtn({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 h-8 px-4 text-[0.50rem] tracking-[0.12em] uppercase transition-colors duration-100"
+      style={{
+        background: 'rgba(239,68,68,0.06)',
+        color: 'rgba(239,68,68,0.75)',
+        border: '1px solid rgba(239,68,68,0.20)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(239,68,68,0.12)';
+        e.currentTarget.style.color = 'rgba(239,68,68,0.92)';
+        e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(239,68,68,0.06)';
+        e.currentTarget.style.color = 'rgba(239,68,68,0.75)';
+        e.currentTarget.style.borderColor = 'rgba(239,68,68,0.20)';
+      }}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
 function RefundCancellationBlock({
   order,
   onStatusChange,
@@ -2009,15 +2020,27 @@ function RefundCancellationBlock({
   order: OrderDetail;
   onStatusChange: (status: OrderStatus, note: string) => Promise<void>;
 }) {
-  const [cancelModal, setCancelModal] = useState(false);
-  const [refundModal, setRefundModal] = useState(false);
+  // ── modal open states ──
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+
+  // ── cancel fields ──
   const [cancelReason, setCancelReason] = useState('');
   const [cancelNote, setCancelNote] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  // ── refund fields ──
   const [refundType, setRefundType] = useState<'full' | 'partial'>('full');
   const [refundAmount, setRefundAmount] = useState('');
+  const [refundMethod, setRefundMethod] = useState<'original' | 'store-credit'>(
+    'original',
+  );
   const [refundReason, setRefundReason] = useState('');
   const [refundNote, setRefundNote] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+
+  // ── refund history (local until API exists) ──
+  const [refundHistory, setRefundHistory] = useState<RefundRecord[]>([]);
 
   const canCancel = ['pending', 'confirmed', 'processing'].includes(
     order.status,
@@ -2026,23 +2049,59 @@ function RefundCancellationBlock({
     order.payment.status === 'paid' &&
     ['delivered', 'cancelled'].includes(order.status);
 
-  if (!canCancel && !canRefund) return null;
+  if (!canCancel && !canRefund && refundHistory.length === 0) return null;
+
+  // ── helpers ──
+  function resetCancel() {
+    setCancelReason('');
+    setCancelNote('');
+  }
+  function resetRefund() {
+    setRefundType('full');
+    setRefundAmount('');
+    setRefundMethod('original');
+    setRefundReason('');
+    setRefundNote('');
+  }
+
+  const partialAmt = parseFloat(refundAmount) || 0;
+  const refundAmountFinal =
+    refundType === 'full' ? order.pricing.total : partialAmt;
+  const refundValid =
+    refundReason !== '' &&
+    (refundType === 'full' ||
+      (partialAmt > 0 && partialAmt <= order.pricing.total));
 
   async function handleCancel() {
     if (!cancelReason) return;
-    setLoading(true);
+    setCancelling(true);
     await onStatusChange('cancelled', cancelNote);
-    setLoading(false);
-    setCancelModal(false);
+    setCancelling(false);
+    setCancelOpen(false);
+    resetCancel();
   }
 
   async function handleRefund() {
-    if (!refundReason) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
-    setRefundModal(false);
+    if (!refundValid) return;
+    setRefunding(true);
+    await new Promise((r) => setTimeout(r, 900));
+    const record: RefundRecord = {
+      id: String(Date.now()),
+      amount: refundAmountFinal,
+      type: refundType,
+      method: refundMethod,
+      reason: refundReason,
+      note: refundNote || undefined,
+      processedBy: 'Admin',
+      createdAt: new Date().toISOString(),
+    };
+    setRefundHistory((prev) => [record, ...prev]);
+    setRefunding(false);
+    setRefundOpen(false);
+    resetRefund();
   }
+
+  const totalRefunded = refundHistory.reduce((s, r) => s + r.amount, 0);
 
   return (
     <>
@@ -2051,65 +2110,158 @@ function RefundCancellationBlock({
           icon={<RotateCcw size={14} strokeWidth={1.8} />}
           label="Refund & Cancellation"
         />
-        <div className="flex flex-wrap gap-3">
-          {canCancel && (
-            <button
-              onClick={() => setCancelModal(true)}
-              className="flex items-center gap-1.5 h-8 px-4 text-[0.50rem] tracking-[0.12em] uppercase transition-colors duration-100"
-              style={{
-                background: 'rgba(239,68,68,0.06)',
-                color: 'rgba(239,68,68,0.75)',
-                border: '1px solid rgba(239,68,68,0.20)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.12)';
-                e.currentTarget.style.color = 'rgba(239,68,68,0.90)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.06)';
-                e.currentTarget.style.color = 'rgba(239,68,68,0.75)';
-              }}
+
+        {/* ── Action buttons ── */}
+        {(canCancel || canRefund) && (
+          <div className="flex flex-wrap gap-3 mb-5">
+            {canCancel && (
+              <RedBtn
+                icon={<X size={11} strokeWidth={2} />}
+                label="Cancel Order"
+                onClick={() => setCancelOpen(true)}
+              />
+            )}
+            {canRefund && (
+              <RedBtn
+                icon={<RotateCcw size={11} strokeWidth={2} />}
+                label="Issue Refund"
+                onClick={() => setRefundOpen(true)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── Refund history ── */}
+        {refundHistory.length > 0 && (
+          <div>
+            {(canCancel || canRefund) && (
+              <div
+                className="mb-4"
+                style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }}
+              />
+            )}
+            <p
+              className="text-[0.44rem] tracking-[0.16em] uppercase mb-3"
+              style={{ color: 'rgba(255,255,255,0.22)' }}
             >
-              <X size={11} strokeWidth={2} /> Cancel Order
-            </button>
-          )}
-          {canRefund && (
-            <button
-              onClick={() => setRefundModal(true)}
-              className="flex items-center gap-1.5 h-8 px-4 text-[0.50rem] tracking-[0.12em] uppercase transition-colors duration-100"
-              style={{
-                background: 'rgba(239,68,68,0.06)',
-                color: 'rgba(239,68,68,0.75)',
-                border: '1px solid rgba(239,68,68,0.20)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.12)';
-                e.currentTarget.style.color = 'rgba(239,68,68,0.90)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.06)';
-                e.currentTarget.style.color = 'rgba(239,68,68,0.75)';
-              }}
-            >
-              <RotateCcw size={11} strokeWidth={2} /> Issue Refund
-            </button>
-          )}
-        </div>
+              Refund History
+              {totalRefunded > 0 && (
+                <span
+                  className="ml-2 normal-case tracking-normal"
+                  style={{ color: 'rgba(74,222,128,0.70)' }}
+                >
+                  — {formatNaira(totalRefunded)} total refunded
+                </span>
+              )}
+            </p>
+            <div style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+              {/* Header */}
+              <div
+                className="grid text-[0.42rem] tracking-[0.14em] uppercase px-4 py-2.5"
+                style={{
+                  gridTemplateColumns: '1fr 1fr 1fr 2fr',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  color: 'rgba(255,255,255,0.22)',
+                  background: 'rgba(255,255,255,0.02)',
+                }}
+              >
+                <span>Amount</span>
+                <span>Date</span>
+                <span>Processed By</span>
+                <span>Reason</span>
+              </div>
+              {refundHistory.map((r) => (
+                <div
+                  key={r.id}
+                  className="grid items-start px-4 py-3 text-[0.52rem] tracking-[0.04em]"
+                  style={{
+                    gridTemplateColumns: '1fr 1fr 1fr 2fr',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  }}
+                >
+                  <div>
+                    <span
+                      style={{
+                        color: 'rgba(74,222,128,0.80)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {formatNaira(r.amount)}
+                    </span>
+                    <span
+                      className="ml-1.5 text-[0.42rem] tracking-[0.10em] uppercase px-1.5 py-px"
+                      style={{
+                        background:
+                          r.type === 'full'
+                            ? 'rgba(96,165,250,0.10)'
+                            : 'rgba(251,191,36,0.10)',
+                        color:
+                          r.type === 'full'
+                            ? 'rgba(96,165,250,0.80)'
+                            : 'rgba(251,191,36,0.80)',
+                        border: `1px solid ${r.type === 'full' ? 'rgba(96,165,250,0.20)' : 'rgba(251,191,36,0.20)'}`,
+                      }}
+                    >
+                      {r.type}
+                    </span>
+                  </div>
+                  <span style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {formatDateShort(r.createdAt)}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.50)' }}>
+                    {r.processedBy}
+                  </span>
+                  <div>
+                    <span style={{ color: 'rgba(255,255,255,0.55)' }}>
+                      {r.reason}
+                    </span>
+                    {r.note && (
+                      <p
+                        className="mt-0.5 text-[0.44rem] leading-relaxed"
+                        style={{ color: 'rgba(255,255,255,0.28)' }}
+                      >
+                        {r.note}
+                      </p>
+                    )}
+                    <span
+                      className="mt-1 inline-block text-[0.42rem] tracking-[0.10em] uppercase px-1.5 py-px"
+                      style={{
+                        background:
+                          r.method === 'original'
+                            ? 'rgba(180,130,60,0.08)'
+                            : 'rgba(139,92,246,0.10)',
+                        color:
+                          r.method === 'original'
+                            ? GOLD
+                            : 'rgba(167,139,250,0.80)',
+                        border: `1px solid ${r.method === 'original' ? `${GOLD_BG}0.20)` : 'rgba(167,139,250,0.20)'}`,
+                      }}
+                    >
+                      {r.method === 'original'
+                        ? 'Original method'
+                        : 'Store credit'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
+      {/* ── Cancel modal ── */}
       <AnimatePresence>
-        {cancelModal && (
+        {cancelOpen && (
           <ConfirmModal
             title="Cancel this order?"
-            body="This will cancel the order and notify the customer via email."
+            body="The order will be cancelled and the customer will be notified by email automatically."
             confirmLabel="Confirm Cancellation"
             confirmDanger
-            loading={loading}
+            loading={cancelling}
             onConfirm={handleCancel}
             onClose={() => {
-              setCancelModal(false);
-              setCancelReason('');
-              setCancelNote('');
+              setCancelOpen(false);
+              resetCancel();
             }}
           >
             <ModalField label="Cancellation Reason *">
@@ -2123,32 +2275,44 @@ function RefundCancellationBlock({
               <ModalTextarea
                 value={cancelNote}
                 onChange={setCancelNote}
-                placeholder="Any additional context…"
+                placeholder="Any additional context for the team…"
               />
             </ModalField>
+            {!cancelReason && (
+              <p
+                className="text-[0.46rem] tracking-[0.06em]"
+                style={{ color: 'rgba(239,68,68,0.60)' }}
+              >
+                Please select a reason to continue.
+              </p>
+            )}
           </ConfirmModal>
         )}
-        {refundModal && (
+      </AnimatePresence>
+
+      {/* ── Refund modal ── */}
+      <AnimatePresence>
+        {refundOpen && (
           <ConfirmModal
-            title="Issue a refund?"
-            body="Refunds must be processed manually through your payment provider."
+            title="Issue a Refund"
+            body="Refunds are processed manually. Confirm the details below and process through your payment provider."
             confirmLabel="Process Refund"
             confirmDanger
-            loading={loading}
+            loading={refunding}
             onConfirm={handleRefund}
             onClose={() => {
-              setRefundModal(false);
-              setRefundReason('');
-              setRefundNote('');
+              setRefundOpen(false);
+              resetRefund();
             }}
           >
+            {/* Refund type */}
             <ModalField label="Refund Type">
               <div className="flex gap-2">
                 {(['full', 'partial'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setRefundType(t)}
-                    className="h-7 px-3 text-[0.46rem] tracking-[0.10em] uppercase transition-colors duration-100 capitalize"
+                    className="h-7 px-3 text-[0.46rem] tracking-[0.10em] uppercase transition-colors duration-100"
                     style={{
                       background:
                         refundType === t
@@ -2156,28 +2320,90 @@ function RefundCancellationBlock({
                           : 'transparent',
                       color:
                         refundType === t
-                          ? 'rgba(239,68,68,0.80)'
+                          ? 'rgba(239,68,68,0.85)'
                           : 'rgba(255,255,255,0.35)',
-                      border: `1px solid ${refundType === t ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.10)'}`,
+                      border: `1px solid ${refundType === t ? 'rgba(239,68,68,0.28)' : 'rgba(255,255,255,0.10)'}`,
                     }}
                   >
                     {t === 'full'
-                      ? `Full — ${formatNaira(order.pricing.total)}`
-                      : 'Partial'}
+                      ? `Full Refund — ${formatNaira(order.pricing.total)}`
+                      : 'Partial Refund'}
                   </button>
                 ))}
               </div>
             </ModalField>
+
+            {/* Partial amount input */}
             {refundType === 'partial' && (
-              <ModalField label="Refund Amount (₦)">
+              <ModalField
+                label={`Refund Amount (₦) — max ${formatNaira(order.pricing.total)}`}
+              >
                 <ModalInput
                   value={refundAmount}
                   onChange={setRefundAmount}
-                  placeholder="0"
+                  placeholder="Enter amount"
                   type="number"
                 />
+                {partialAmt > order.pricing.total && (
+                  <p
+                    className="mt-1 text-[0.44rem] tracking-[0.06em]"
+                    style={{ color: 'rgba(239,68,68,0.70)' }}
+                  >
+                    Amount exceeds order total.
+                  </p>
+                )}
               </ModalField>
             )}
+
+            {/* Refund method */}
+            <ModalField label="Refund Method">
+              <div className="flex gap-2">
+                {(
+                  [
+                    {
+                      value: 'original',
+                      label: 'Original Payment Method',
+                      disabled: false,
+                    },
+                    {
+                      value: 'store-credit',
+                      label: 'Store Credit (Phase 2)',
+                      disabled: true,
+                    },
+                  ] as {
+                    value: 'original' | 'store-credit';
+                    label: string;
+                    disabled: boolean;
+                  }[]
+                ).map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => {
+                      if (!m.disabled) setRefundMethod(m.value);
+                    }}
+                    disabled={m.disabled}
+                    className="h-7 px-3 text-[0.46rem] tracking-[0.08em] uppercase transition-colors duration-100"
+                    style={{
+                      background:
+                        refundMethod === m.value
+                          ? `${GOLD_BG}0.10)`
+                          : 'transparent',
+                      color: m.disabled
+                        ? 'rgba(255,255,255,0.18)'
+                        : refundMethod === m.value
+                          ? GOLD
+                          : 'rgba(255,255,255,0.35)',
+                      border: `1px solid ${refundMethod === m.value ? `${GOLD_BG}0.25)` : 'rgba(255,255,255,0.10)'}`,
+                      cursor: m.disabled ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </ModalField>
+
+            {/* Reason */}
             <ModalField label="Reason *">
               <ModalSelect
                 value={refundReason}
@@ -2185,13 +2411,39 @@ function RefundCancellationBlock({
                 options={REFUND_REASONS}
               />
             </ModalField>
+
+            {/* Internal note */}
             <ModalField label="Internal Note (optional)">
               <ModalTextarea
                 value={refundNote}
                 onChange={setRefundNote}
-                placeholder="Internal note for this refund…"
+                placeholder="Internal note visible only to admins…"
               />
             </ModalField>
+
+            {/* Summary line */}
+            {refundValid && (
+              <div
+                className="flex items-center justify-between px-3 py-2 mt-1"
+                style={{
+                  background: 'rgba(74,222,128,0.05)',
+                  border: '1px solid rgba(74,222,128,0.15)',
+                }}
+              >
+                <span
+                  className="text-[0.46rem] tracking-[0.10em] uppercase"
+                  style={{ color: 'rgba(255,255,255,0.35)' }}
+                >
+                  Refund total
+                </span>
+                <span
+                  className="text-[0.60rem] tracking-[0.04em] font-semibold"
+                  style={{ color: 'rgba(74,222,128,0.85)' }}
+                >
+                  {formatNaira(refundAmountFinal)}
+                </span>
+              </div>
+            )}
           </ConfirmModal>
         )}
       </AnimatePresence>
@@ -2524,11 +2776,7 @@ export default function AdminOrderDetailPage({
   }
 
   function handlePrintInvoice() {
-    const html = generateInvoiceHTML(order!);
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    router.push(`/admin/orders/${id}/invoice`);
   }
 
   return (

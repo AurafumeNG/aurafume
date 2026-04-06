@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Download,
-  Printer,
   Search,
   X,
   ChevronDown,
@@ -14,9 +13,15 @@ import {
   Loader2,
   CheckSquare,
   Square,
+  Copy,
+  Check,
   Eye,
-  FileText,
-  RefreshCw,
+  Edit2,
+  ToggleLeft,
+  ToggleRight,
+  Archive,
+  Plus,
+  Tag,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
@@ -28,54 +33,49 @@ const GOLD = 'oklch(0.53 0.09 70)';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type OrderStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'processing'
-  | 'shipped'
-  | 'delivered'
-  | 'cancelled';
-type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
-type PaymentMethod = 'bank-transfer' | 'paystack';
-type SortKey = 'newest' | 'oldest' | 'amount-desc' | 'amount-asc' | 'name-asc';
-type DateRange = 'all' | 'today' | 'week' | 'month' | 'custom';
+type PromoStatus = 'active' | 'scheduled' | 'expired' | 'disabled';
+type PromoType = 'pct' | 'flat' | 'free-shipping' | 'buy-x-get-y';
+type PromoEligibility = 'all' | 'first-order' | 'specific' | 'min-spend';
+type PromoUsage = 'unused' | 'partial' | 'full';
+type PromoExpiry = 'this-week' | 'this-month' | 'no-expiry';
+type SortKey =
+  | 'newest'
+  | 'oldest'
+  | 'most-used'
+  | 'least-used'
+  | 'expiry-soonest'
+  | 'expiry-latest'
+  | 'discount-desc'
+  | 'discount-asc';
 
-interface AdminOrder {
+interface AdminPromoCode {
   _id: string;
-  orderNumber: string;
-  contact: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-  };
-  pricing: {
-    subtotal: number;
-    discount: number;
-    deliveryFee: number;
-    total: number;
-  };
-  delivery: {
-    option: string;
-    label: string;
-  };
-  payment: {
-    method: PaymentMethod;
-    status: PaymentStatus;
-    paidAt?: string;
-  };
-  status: OrderStatus;
-  items: { name: string; qty: number; size: string; pricePerUnit: number }[];
+  code: string;
+  description: string;
+  type: PromoType;
+  value: number;
+  label: string;
+  minOrderAmount: number;
+  firstOrderOnly: boolean;
+  perCustomerLimit: number | null;
+  maxUses: number | null;
+  usedCount: number;
+  revenueImpact: number;
+  status: PromoStatus;
+  validFrom: string;
+  expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-interface Stats {
-  totalOrders: number;
-  pendingOrders: number;
-  pendingBankTransfers: number;
-  todayOrders: number;
-  totalRevenue: number;
+interface PromoStats {
+  total: number;
+  active: number;
+  expired: number;
+  scheduled: number;
+  totalUsesThisMonth: number;
+  discountThisMonth: number;
+  topCode: string;
 }
 
 interface AdminUser {
@@ -86,31 +86,63 @@ interface AdminUser {
   avatar?: string;
 }
 
-const STATUS_TABS: { value: 'all' | OrderStatus; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'shipped', label: 'Shipped' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
+// ── Options ────────────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'newest', label: 'Newest First' },
   { value: 'oldest', label: 'Oldest First' },
-  { value: 'amount-desc', label: 'Amount: High–Low' },
-  { value: 'amount-asc', label: 'Amount: Low–High' },
-  { value: 'name-asc', label: 'Customer: A–Z' },
+  { value: 'most-used', label: 'Most Used' },
+  { value: 'least-used', label: 'Least Used' },
+  { value: 'expiry-soonest', label: 'Expiry: Soonest' },
+  { value: 'expiry-latest', label: 'Expiry: Latest' },
+  { value: 'discount-desc', label: 'Discount: High–Low' },
+  { value: 'discount-asc', label: 'Discount: Low–High' },
 ];
 
-const BULK_ACTIONS: { value: string; label: string }[] = [
-  { value: 'processing', label: 'Mark as Processing' },
-  { value: 'shipped', label: 'Mark as Shipped' },
-  { value: 'delivered', label: 'Mark as Delivered' },
-  { value: 'cancelled', label: 'Mark as Cancelled' },
+const STATUS_OPTIONS = [
+  { value: '', label: 'All Statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'disabled', label: 'Disabled' },
+] as const;
+
+const TYPE_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'pct', label: 'Percentage' },
+  { value: 'flat', label: 'Fixed Amount' },
+  { value: 'free-shipping', label: 'Free Shipping' },
+  { value: 'buy-x-get-y', label: 'Buy X Get Y' },
+] as const;
+
+const ELIGIBILITY_OPTIONS = [
+  { value: '', label: 'All Eligibility' },
+  { value: 'all', label: 'All Customers' },
+  { value: 'first-order', label: 'First Order Only' },
+  { value: 'specific', label: 'Specific Customers' },
+  { value: 'min-spend', label: 'Minimum Spend' },
+] as const;
+
+const USAGE_OPTIONS = [
+  { value: '', label: 'All Usage' },
+  { value: 'unused', label: 'Unused' },
+  { value: 'partial', label: 'Partially Used' },
+  { value: 'full', label: 'Fully Used' },
+] as const;
+
+const EXPIRY_OPTIONS = [
+  { value: '', label: 'All Expiry' },
+  { value: 'this-week', label: 'Expiring This Week' },
+  { value: 'this-month', label: 'Expiring This Month' },
+  { value: 'no-expiry', label: 'No Expiry' },
+] as const;
+
+const BULK_ACTIONS = [
+  { value: 'enable', label: 'Enable Selected' },
+  { value: 'disable', label: 'Disable Selected' },
+  { value: 'archive', label: 'Archive Selected (no usage only)' },
   { value: 'export', label: 'Export Selected as CSV' },
-  { value: 'print', label: 'Print Selected Invoices' },
-];
+] as const;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -120,7 +152,8 @@ function formatNaira(amount: number) {
   return `₦${amount.toLocaleString('en-NG')}`;
 }
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null) {
+  if (!iso) return 'No Expiry';
   const d = new Date(iso);
   return d.toLocaleDateString('en-NG', {
     day: '2-digit',
@@ -129,50 +162,52 @@ function formatDate(iso: string) {
   });
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-NG', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function getDiscountLabel(code: AdminPromoCode): string {
+  if (code.type === 'pct') return `${code.value}%`;
+  if (code.type === 'flat') return `${formatNaira(code.value)} off`;
+  if (code.type === 'free-shipping') return 'Free';
+  return `Buy ${code.value} Get 1`;
 }
 
-function exportOrdersToCSV(orders: AdminOrder[]) {
+function exportCodesToCSV(codes: AdminPromoCode[]) {
   const headers = [
-    'Order #',
-    'Customer',
-    'Email',
-    'Phone',
-    'Items',
-    'Subtotal (₦)',
-    'Delivery (₦)',
-    'Total (₦)',
-    'Payment Method',
-    'Payment Status',
-    'Order Status',
-    'Delivery Option',
-    'Date',
+    'Code',
+    'Description',
+    'Type',
+    'Value',
+    'Min Order (₦)',
+    'First Order Only',
+    'Max Uses/Customer',
+    'Max Uses',
+    'Used Count',
+    'Revenue Impact (₦)',
+    'Status',
+    'Valid From',
+    'Expires At',
+    'Created At',
   ];
-  const rows = orders.map((o) => [
-    o.orderNumber,
-    `"${o.contact.firstName} ${o.contact.lastName}"`,
-    o.contact.email,
-    o.contact.phone,
-    o.items.reduce((s, i) => s + i.qty, 0),
-    o.pricing.subtotal,
-    o.pricing.deliveryFee,
-    o.pricing.total,
-    o.payment.method,
-    o.payment.status,
-    o.status,
-    `"${o.delivery.label}"`,
-    formatDate(o.createdAt),
+  const rows = codes.map((c) => [
+    c.code,
+    `"${c.description}"`,
+    c.type,
+    c.value,
+    c.minOrderAmount ?? 0,
+    c.firstOrderOnly ? 'Yes' : 'No',
+    c.perCustomerLimit ?? 'Unlimited',
+    c.maxUses ?? 'Unlimited',
+    c.usedCount,
+    c.revenueImpact,
+    c.status,
+    formatDate(c.validFrom),
+    formatDate(c.expiresAt),
+    formatDate(c.createdAt),
   ]);
   const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), {
     href: url,
-    download: `aurafumeng-orders-${Date.now()}.csv`,
+    download: `aurafumeng-promo-codes-${Date.now()}.csv`,
   });
   a.click();
   URL.revokeObjectURL(url);
@@ -193,7 +228,7 @@ function FilterDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const active = value !== 'All' && value !== '';
+  const active = value !== '' && value !== 'All';
   const currentLabel = options.find((o) => o.value === value)?.label ?? label;
   const displayLabel = active ? `${label}: ${currentLabel}` : label;
 
@@ -231,7 +266,6 @@ function FilterDropdown({
           }}
         />
       </button>
-
       <AnimatePresence>
         {open && (
           <motion.div
@@ -239,7 +273,7 @@ function FilterDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.12 }}
-            className="absolute top-[calc(100%+4px)] left-0 z-50 min-w-[160px] py-1"
+            className="absolute top-[calc(100%+4px)] left-0 z-50 min-w-[180px] py-1"
             style={{
               background: '#1E1E1E',
               border: '1px solid rgba(255,255,255,0.08)',
@@ -346,7 +380,7 @@ function SortDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.12 }}
-            className="absolute top-[calc(100%+4px)] right-0 z-50 min-w-[170px] py-1"
+            className="absolute top-[calc(100%+4px)] right-0 z-50 min-w-[190px] py-1"
             style={{
               background: '#1E1E1E',
               border: '1px solid rgba(255,255,255,0.08)',
@@ -407,11 +441,13 @@ function HeaderButton({
   label,
   accent,
   onClick,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   accent?: boolean;
   onClick?: () => void;
+  href?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const cls =
@@ -429,6 +465,21 @@ function HeaderButton({
         color: hovered ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.38)',
         border: `1px solid ${hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
       };
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={cls}
+        style={style}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {icon}
+        {label}
+      </Link>
+    );
+  }
   return (
     <button
       onClick={onClick}
@@ -445,24 +496,31 @@ function HeaderButton({
 
 // ── Stat Card ──────────────────────────────────────────────────────────────────
 
+type StatColor =
+  | 'neutral'
+  | 'amber'
+  | 'red'
+  | 'green'
+  | 'gold'
+  | 'gray'
+  | 'blue';
+
 function StatCard({
   value,
   label,
   sub,
   color,
-  urgent,
   onClick,
 }: {
   value: string;
   label: string;
   sub: string;
-  color: 'neutral' | 'amber' | 'red' | 'green' | 'gold';
-  urgent?: boolean;
+  color: StatColor;
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const colorMap = {
+  const colorMap: Record<StatColor, { accent: string; dot: string }> = {
     neutral: {
       accent: 'rgba(255,255,255,0.55)',
       dot: 'rgba(255,255,255,0.20)',
@@ -471,7 +529,11 @@ function StatCard({
     red: { accent: 'rgba(239,68,68,0.85)', dot: 'rgba(239,68,68,0.60)' },
     green: { accent: 'rgba(74,222,128,0.85)', dot: 'rgba(34,197,94,0.55)' },
     gold: { accent: GOLD, dot: 'rgba(180,130,60,0.50)' },
-  }[color];
+    gray: { accent: 'rgba(156,163,175,0.75)', dot: 'rgba(107,114,128,0.55)' },
+    blue: { accent: 'rgba(96,165,250,0.85)', dot: 'rgba(59,130,246,0.55)' },
+  };
+
+  const c = colorMap[color];
 
   return (
     <div
@@ -480,31 +542,17 @@ function StatCard({
       onMouseLeave={() => setHovered(false)}
       style={{
         background: hovered && onClick ? 'rgba(255,255,255,0.025)' : '#141414',
-        border: `1px solid ${urgent ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.06)'}`,
+        border: '1px solid rgba(255,255,255,0.06)',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, border-color 0.12s',
-        flex: '1 1 160px',
-        minWidth: '140px',
+        flex: '1 1 150px',
+        minWidth: '130px',
         padding: '16px 18px',
       }}
     >
-      {urgent && (
-        <div className="flex items-center gap-1.5 mb-2">
-          <span
-            className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-            style={{ background: colorMap.dot }}
-          />
-          <span
-            className="text-[0.44rem] tracking-[0.12em] uppercase font-semibold"
-            style={{ color: 'rgba(239,68,68,0.60)' }}
-          >
-            Urgent
-          </span>
-        </div>
-      )}
       <p
         className="text-[1.05rem] font-semibold tracking-tight tabular-nums leading-none"
-        style={{ color: colorMap.accent }}
+        style={{ color: c.accent }}
       >
         {value}
       </p>
@@ -523,136 +571,12 @@ function StatCard({
       {onClick && (
         <p
           className="mt-2 text-[0.44rem] tracking-[0.10em] uppercase"
-          style={{ color: colorMap.dot }}
+          style={{ color: c.dot }}
         >
           Click to filter →
         </p>
       )}
     </div>
-  );
-}
-
-// ── Order Status Pill ──────────────────────────────────────────────────────────
-
-function OrderStatusPill({ status }: { status: OrderStatus }) {
-  const cfg: Record<
-    OrderStatus,
-    { label: string; bg: string; color: string; border: string }
-  > = {
-    pending: {
-      label: 'Pending',
-      bg: 'rgba(234,179,8,0.09)',
-      color: 'rgba(250,204,21,0.85)',
-      border: 'rgba(234,179,8,0.22)',
-    },
-    confirmed: {
-      label: 'Confirmed',
-      bg: 'rgba(99,102,241,0.10)',
-      color: 'rgba(129,140,248,0.85)',
-      border: 'rgba(99,102,241,0.22)',
-    },
-    processing: {
-      label: 'Processing',
-      bg: 'rgba(59,130,246,0.10)',
-      color: 'rgba(96,165,250,0.88)',
-      border: 'rgba(59,130,246,0.22)',
-    },
-    shipped: {
-      label: 'Shipped',
-      bg: 'rgba(180,130,60,0.10)',
-      color: GOLD,
-      border: 'rgba(180,130,60,0.24)',
-    },
-    delivered: {
-      label: 'Delivered',
-      bg: 'rgba(34,197,94,0.09)',
-      color: 'rgba(74,222,128,0.88)',
-      border: 'rgba(34,197,94,0.18)',
-    },
-    cancelled: {
-      label: 'Cancelled',
-      bg: 'rgba(239,68,68,0.08)',
-      color: 'rgba(239,68,68,0.72)',
-      border: 'rgba(239,68,68,0.18)',
-    },
-  };
-  const c = cfg[status];
-  return (
-    <span
-      className="inline-flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
-      style={{
-        background: c.bg,
-        color: c.color,
-        border: `1px solid ${c.border}`,
-      }}
-    >
-      {c.label}
-    </span>
-  );
-}
-
-// ── Payment Status Pill ────────────────────────────────────────────────────────
-
-function PaymentStatusPill({ status }: { status: PaymentStatus }) {
-  const cfg: Record<
-    PaymentStatus,
-    { label: string; bg: string; color: string; border: string }
-  > = {
-    pending: {
-      label: 'Pending',
-      bg: 'rgba(234,179,8,0.09)',
-      color: 'rgba(250,204,21,0.75)',
-      border: 'rgba(234,179,8,0.18)',
-    },
-    paid: {
-      label: 'Paid',
-      bg: 'rgba(34,197,94,0.09)',
-      color: 'rgba(74,222,128,0.82)',
-      border: 'rgba(34,197,94,0.16)',
-    },
-    failed: {
-      label: 'Failed',
-      bg: 'rgba(239,68,68,0.08)',
-      color: 'rgba(239,68,68,0.70)',
-      border: 'rgba(239,68,68,0.16)',
-    },
-    refunded: {
-      label: 'Refunded',
-      bg: 'rgba(255,255,255,0.04)',
-      color: 'rgba(255,255,255,0.38)',
-      border: 'rgba(255,255,255,0.10)',
-    },
-  };
-  const c = cfg[status];
-  return (
-    <span
-      className="inline-flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
-      style={{
-        background: c.bg,
-        color: c.color,
-        border: `1px solid ${c.border}`,
-      }}
-    >
-      {c.label}
-    </span>
-  );
-}
-
-// ── Payment Method Badge ───────────────────────────────────────────────────────
-
-function PaymentMethodBadge({ method }: { method: PaymentMethod }) {
-  const isBank = method === 'bank-transfer';
-  return (
-    <span
-      className="inline-flex items-center h-5 px-2 text-[0.44rem] tracking-[0.10em] uppercase font-medium"
-      style={{
-        background: isBank ? 'rgba(99,102,241,0.07)' : 'rgba(180,130,60,0.07)',
-        color: isBank ? 'rgba(129,140,248,0.70)' : 'rgba(180,130,60,0.65)',
-        border: `1px solid ${isBank ? 'rgba(99,102,241,0.15)' : 'rgba(180,130,60,0.16)'}`,
-      }}
-    >
-      {isBank ? 'Bank Transfer' : 'Paystack'}
-    </span>
   );
 }
 
@@ -680,332 +604,206 @@ function Checkbox({
   );
 }
 
-// ── Admin Invoice HTML ─────────────────────────────────────────────────────────
+// ── PromoTypeBadge ─────────────────────────────────────────────────────────────
 
-function generateAdminInvoiceHTML(order: AdminOrder): string {
-  const date = new Date(order.createdAt).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-  const rows = order.items
-    .map(
-      (i) => `<tr>
-      <td style="padding:8px 0;border-bottom:1px solid #222;">${i.name} (${i.size})</td>
-      <td style="padding:8px 0;border-bottom:1px solid #222;text-align:center;">×${i.qty}</td>
-      <td style="padding:8px 0;border-bottom:1px solid #222;text-align:right;">₦${(i.pricePerUnit * i.qty).toLocaleString()}</td>
-    </tr>`,
-    )
-    .join('');
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Invoice – ${order.orderNumber}</title><style>
-  body{margin:0;padding:40px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#0a0a0a;color:#f0f0f0;}
-  h1{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:#c5a76d;margin:0 0 40px;}
-  h2{font-size:20px;font-weight:300;letter-spacing:.15em;text-transform:uppercase;margin:0 0 6px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  .muted{color:#666;font-size:11px;letter-spacing:.1em;}
-  .row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;}
-  .total{border-top:1px solid #333;padding-top:10px;font-weight:600;font-size:14px;}
-  @media print{body{background:#fff;color:#111;}h1{color:#b8932a;}}
-</style></head><body>
-<h1>AuraFume</h1>
-<h2>Invoice</h2>
-<p class="muted">Order ${order.orderNumber} &nbsp;·&nbsp; ${date}</p>
-<br>
-<table>
-  <thead><tr>
-    <th style="text-align:left;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Item</th>
-    <th style="text-align:center;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Qty</th>
-    <th style="text-align:right;padding-bottom:8px;border-bottom:1px solid #333;font-size:10px;letter-spacing:.2em;text-transform:uppercase;">Amount</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<br>
-<div class="row"><span class="muted">Subtotal</span><span>₦${order.pricing.subtotal.toLocaleString()}</span></div>
-<div class="row"><span class="muted">Delivery</span><span>₦${order.pricing.deliveryFee.toLocaleString()}</span></div>
-${order.pricing.discount > 0 ? `<div class="row"><span class="muted">Discount</span><span>−₦${order.pricing.discount.toLocaleString()}</span></div>` : ''}
-<div class="row total"><span>Total</span><span>₦${order.pricing.total.toLocaleString()}</span></div>
-<br><br><p class="muted">AuraFume · Lagos, Nigeria · hello@aurafume.com</p>
-<script>window.onload=function(){window.print();}<\/script>
-</body></html>`;
-}
-
-// ── Order Row ──────────────────────────────────────────────────────────────────
-
-function OrderRow({
-  order,
-  selected,
-  onToggle,
-  onStatusChange,
-}: {
-  order: AdminOrder;
-  selected: boolean;
-  onToggle: () => void;
-  onStatusChange: (id: string, status: OrderStatus) => Promise<void>;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
-  const [statusUpdating, setStatusUpdating] = useState(false);
-  const statusRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!statusOpen) return;
-    function handle(e: MouseEvent) {
-      if (statusRef.current && !statusRef.current.contains(e.target as Node))
-        setStatusOpen(false);
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [statusOpen]);
-
-  async function handleStatusSelect(s: OrderStatus) {
-    setStatusOpen(false);
-    setStatusUpdating(true);
-    await onStatusChange(order._id, s);
-    setStatusUpdating(false);
-  }
-
-  const ALL_STATUSES: OrderStatus[] = [
-    'pending',
-    'confirmed',
-    'processing',
-    'shipped',
-    'delivered',
-    'cancelled',
-  ];
-  const customerName = `${order.contact.firstName} ${order.contact.lastName}`;
-  const itemCount = order.items.reduce((s, i) => s + i.qty, 0);
-
+function PromoTypeBadge({ type }: { type: PromoType }) {
+  const cfg: Record<
+    PromoType,
+    { label: string; bg: string; color: string; border: string }
+  > = {
+    pct: {
+      label: 'Percentage Off',
+      bg: 'rgba(139,92,246,0.10)',
+      color: 'rgba(167,139,250,0.85)',
+      border: 'rgba(139,92,246,0.22)',
+    },
+    flat: {
+      label: 'Fixed Amount Off',
+      bg: 'rgba(59,130,246,0.10)',
+      color: 'rgba(96,165,250,0.85)',
+      border: 'rgba(59,130,246,0.22)',
+    },
+    'free-shipping': {
+      label: 'Free Shipping',
+      bg: 'rgba(20,184,166,0.10)',
+      color: 'rgba(45,212,191,0.85)',
+      border: 'rgba(20,184,166,0.22)',
+    },
+    'buy-x-get-y': {
+      label: 'Buy X Get Y',
+      bg: 'rgba(249,115,22,0.10)',
+      color: 'rgba(251,146,60,0.85)',
+      border: 'rgba(249,115,22,0.22)',
+    },
+  };
+  const c = cfg[type];
   return (
-    <tr
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <span
+      className="inline-flex items-center h-5 px-2 text-[0.44rem] tracking-[0.10em] uppercase font-semibold whitespace-nowrap"
       style={{
-        background: selected
-          ? 'rgba(180,130,60,0.03)'
-          : hovered
-            ? 'rgba(255,255,255,0.018)'
-            : 'transparent',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        transition: 'background 0.10s',
+        background: c.bg,
+        color: c.color,
+        border: `1px solid ${c.border}`,
       }}
     >
-      {/* Checkbox */}
-      <td className="px-4 py-3 w-8">
-        <Checkbox checked={selected} onChange={onToggle} />
-      </td>
+      {c.label}
+    </span>
+  );
+}
 
-      {/* Order # + Date */}
-      <td className="px-4 py-3 min-w-[120px]">
-        <p
-          className="text-[0.60rem] tracking-[0.06em] font-mono font-medium"
-          style={{ color: GOLD }}
-        >
-          {order.orderNumber}
-        </p>
-        <p
-          className="mt-0.5 text-[0.44rem] tracking-[0.08em]"
-          style={{ color: 'rgba(255,255,255,0.22)' }}
-        >
-          {formatDate(order.createdAt)} · {formatTime(order.createdAt)}
-        </p>
-      </td>
+// ── PromoStatusPill ────────────────────────────────────────────────────────────
 
-      {/* Customer */}
-      <td className="px-4 py-3 min-w-[160px]">
-        <p
-          className="text-[0.60rem] tracking-[0.04em] font-medium"
-          style={{ color: 'rgba(255,255,255,0.80)' }}
-        >
-          {customerName}
-        </p>
-        <p
-          className="mt-0.5 text-[0.44rem] tracking-[0.04em]"
-          style={{ color: 'rgba(255,255,255,0.28)' }}
-        >
-          {order.contact.email}
-        </p>
-      </td>
+function PromoStatusPill({ status }: { status: PromoStatus }) {
+  const cfg: Record<
+    PromoStatus,
+    { label: string; bg: string; color: string; border: string }
+  > = {
+    active: {
+      label: 'Active',
+      bg: 'rgba(34,197,94,0.09)',
+      color: 'rgba(74,222,128,0.88)',
+      border: 'rgba(34,197,94,0.18)',
+    },
+    scheduled: {
+      label: 'Scheduled',
+      bg: 'rgba(59,130,246,0.10)',
+      color: 'rgba(96,165,250,0.85)',
+      border: 'rgba(59,130,246,0.22)',
+    },
+    expired: {
+      label: 'Expired',
+      bg: 'rgba(255,255,255,0.04)',
+      color: 'rgba(156,163,175,0.70)',
+      border: 'rgba(255,255,255,0.10)',
+    },
+    disabled: {
+      label: 'Disabled',
+      bg: 'rgba(239,68,68,0.08)',
+      color: 'rgba(239,68,68,0.72)',
+      border: 'rgba(239,68,68,0.18)',
+    },
+  };
+  const c = cfg[status];
+  return (
+    <span
+      className="inline-flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
+      style={{
+        background: c.bg,
+        color: c.color,
+        border: `1px solid ${c.border}`,
+      }}
+    >
+      {c.label}
+    </span>
+  );
+}
 
-      {/* Items */}
-      <td className="px-4 py-3">
-        <p
-          className="text-[0.56rem] tracking-[0.06em]"
-          style={{ color: 'rgba(255,255,255,0.50)' }}
-        >
-          {itemCount} {itemCount === 1 ? 'item' : 'items'}
-        </p>
-        <p
-          className="mt-0.5 text-[0.44rem] tracking-[0.04em] line-clamp-1"
-          style={{ color: 'rgba(255,255,255,0.20)' }}
-        >
-          {order.items.map((i) => i.name).join(', ')}
-        </p>
-      </td>
+// ── UsageBar ───────────────────────────────────────────────────────────────────
 
-      {/* Total */}
-      <td className="px-4 py-3">
-        <p
-          className="text-[0.62rem] tracking-[0.04em] font-semibold tabular-nums"
-          style={{ color: 'rgba(255,255,255,0.80)' }}
-        >
-          {formatNaira(order.pricing.total)}
-        </p>
-        {order.pricing.discount > 0 && (
-          <p
-            className="mt-0.5 text-[0.44rem] tracking-[0.06em]"
-            style={{ color: 'rgba(74,222,128,0.60)' }}
-          >
-            −{formatNaira(order.pricing.discount)} off
-          </p>
-        )}
-      </td>
+function UsageBar({ used, max }: { used: number; max: number | null }) {
+  const pct = max && max > 0 ? Math.min(100, (used / max) * 100) : 0;
+  const full = max !== null && used >= max;
+  const color = full
+    ? 'rgba(239,68,68,0.75)'
+    : pct > 70
+      ? 'rgba(250,204,21,0.75)'
+      : 'rgba(74,222,128,0.70)';
 
-      {/* Payment */}
-      <td className="px-4 py-3">
-        <div className="flex flex-col gap-1">
-          <PaymentMethodBadge method={order.payment.method} />
-          <PaymentStatusPill status={order.payment.status} />
+  return (
+    <div className="space-y-1 min-w-[90px]">
+      <p
+        className="text-[0.50rem] tracking-[0.06em] tabular-nums"
+        style={{ color: 'rgba(255,255,255,0.55)' }}
+      >
+        {used.toLocaleString()} / {max === null ? '∞' : max.toLocaleString()}{' '}
+        uses
+      </p>
+      {max !== null && (
+        <div
+          className="h-1 w-full"
+          style={{ background: 'rgba(255,255,255,0.07)' }}
+        >
+          <div
+            className="h-full transition-all duration-300"
+            style={{ width: `${pct}%`, background: color }}
+          />
         </div>
-      </td>
+      )}
+    </div>
+  );
+}
 
-      {/* Delivery */}
-      <td className="px-4 py-3">
-        <p
-          className="text-[0.52rem] tracking-[0.04em] line-clamp-1"
-          style={{ color: 'rgba(255,255,255,0.38)' }}
+// ── CodeCopyButton ─────────────────────────────────────────────────────────────
+
+function CodeCopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy code"
+      className="flex items-center justify-center w-5 h-5 shrink-0 transition-colors duration-100"
+      style={{
+        color: copied ? 'rgba(74,222,128,0.80)' : 'rgba(255,255,255,0.22)',
+        background: 'transparent',
+      }}
+      onMouseEnter={(e) => {
+        if (!copied) e.currentTarget.style.color = 'rgba(255,255,255,0.58)';
+      }}
+      onMouseLeave={(e) => {
+        if (!copied) e.currentTarget.style.color = 'rgba(255,255,255,0.22)';
+      }}
+    >
+      {copied ? (
+        <Check size={11} strokeWidth={2.2} />
+      ) : (
+        <Copy size={11} strokeWidth={1.8} />
+      )}
+    </button>
+  );
+}
+
+// ── ConditionTags ──────────────────────────────────────────────────────────────
+
+function ConditionTags({ code }: { code: AdminPromoCode }) {
+  const tags: string[] = [];
+  if (code.minOrderAmount) tags.push(`Min ${formatNaira(code.minOrderAmount)}`);
+  if (code.firstOrderOnly) tags.push('First order');
+  if (code.perCustomerLimit != null)
+    tags.push(`Max ${code.perCustomerLimit}/customer`);
+  if (!tags.length)
+    return (
+      <span
+        className="text-[0.46rem]"
+        style={{ color: 'rgba(255,255,255,0.20)' }}
+      >
+        —
+      </span>
+    );
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex items-center h-4 px-1.5 text-[0.42rem] tracking-[0.08em] whitespace-nowrap"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            color: 'rgba(255,255,255,0.38)',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}
         >
-          {order.delivery.label}
-        </p>
-      </td>
-
-      {/* Status */}
-      <td className="px-4 py-3">
-        <OrderStatusPill status={order.status} />
-      </td>
-
-      {/* Actions */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1">
-          {/* View — opens order detail page */}
-          <Link
-            href={`/admin/orders/${order._id}`}
-            title="View order detail"
-            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
-            style={{
-              color: 'rgba(255,255,255,0.28)',
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-            }}
-          >
-            <Eye size={12} strokeWidth={1.8} />
-          </Link>
-
-          {/* Update Status — inline dropdown */}
-          <div className="relative" ref={statusRef}>
-            <button
-              onClick={() => setStatusOpen((o) => !o)}
-              title="Update status"
-              className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
-              style={{
-                color: statusOpen ? GOLD : 'rgba(255,255,255,0.28)',
-                background: statusOpen
-                  ? 'rgba(180,130,60,0.08)'
-                  : 'transparent',
-                border: `1px solid ${statusOpen ? 'rgba(180,130,60,0.20)' : 'rgba(255,255,255,0.06)'}`,
-              }}
-              onMouseEnter={(e) => {
-                if (!statusOpen) {
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!statusOpen) {
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-                }
-              }}
-            >
-              {statusUpdating ? (
-                <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
-              ) : (
-                <ChevronDown size={11} strokeWidth={1.8} />
-              )}
-            </button>
-            {statusOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 z-[100] py-1 min-w-[130px]"
-                style={{
-                  background: '#1C1C1C',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.50)',
-                }}
-              >
-                {ALL_STATUSES.filter((s) => s !== order.status).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatusSelect(s)}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[0.48rem] tracking-[0.10em] uppercase transition-colors duration-100"
-                    style={{
-                      color: 'rgba(255,255,255,0.45)',
-                      background: 'transparent',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background =
-                        'rgba(255,255,255,0.05)';
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.80)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.45)';
-                    }}
-                  >
-                    <span style={{ color: GOLD, opacity: 0.7 }}>→</span> {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Invoice — navigates to invoice page */}
-          <Link
-            href={`/admin/orders/${order._id}/invoice`}
-            title="Open invoice"
-            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
-            style={{
-              color: 'rgba(255,255,255,0.28)',
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-            }}
-          >
-            <FileText size={12} strokeWidth={1.8} />
-          </Link>
-        </div>
-      </td>
-    </tr>
+          {tag}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -1044,390 +842,476 @@ function PaginationBtn({
   );
 }
 
-// ── Order Detail Drawer ────────────────────────────────────────────────────────
+// ── PromoCodeRow ───────────────────────────────────────────────────────────────
 
-function OrderDetailDrawer({
-  order,
-  onClose,
-  onStatusChange,
+function PromoCodeRow({
+  code,
+  selected,
+  onToggle,
+  onToggleStatus,
+  onDuplicate,
+  onArchive,
 }: {
-  order: AdminOrder | null;
-  onClose: () => void;
-  onStatusChange: (id: string, status: OrderStatus) => Promise<void>;
+  code: AdminPromoCode;
+  selected: boolean;
+  onToggle: () => void;
+  onToggleStatus: (id: string, enable: boolean) => Promise<void>;
+  onDuplicate: (id: string) => Promise<void>;
+  onArchive: (id: string) => Promise<void>;
 }) {
-  const [updating, setUpdating] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    right: number;
+  }>({ top: 0, right: 0 });
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  if (!order) return null;
+  useEffect(() => {
+    if (!actionsOpen) return;
+    function handle(e: MouseEvent) {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node))
+        setActionsOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [actionsOpen]);
 
-  const NEXT_STATUSES: OrderStatus[] = [
-    'pending',
-    'confirmed',
-    'processing',
-    'shipped',
-    'delivered',
-    'cancelled',
-  ];
-  const customerName = `${order.contact.firstName} ${order.contact.lastName}`;
-
-  async function handleStatus(s: OrderStatus) {
-    setUpdating(true);
-    await onStatusChange(order!._id, s);
-    setUpdating(false);
+  function openActions() {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setActionsOpen((o) => !o);
   }
 
+  async function handleToggleStatus() {
+    setToggling(true);
+    await onToggleStatus(code._id, code.status === 'disabled');
+    setToggling(false);
+  }
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    await onDuplicate(code._id);
+    setDuplicating(false);
+  }
+
+  async function handleArchive() {
+    setArchiving(true);
+    await onArchive(code._id);
+    setArchiving(false);
+  }
+
+  const canArchive = code.usedCount === 0;
+
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-      className="fixed inset-0 z-[60] flex items-start justify-end"
-      style={{ background: 'rgba(0,0,0,0.65)' }}
-      onClick={onClose}
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: selected
+          ? 'rgba(180,130,60,0.04)'
+          : hovered
+            ? 'rgba(255,255,255,0.015)'
+            : 'transparent',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        transition: 'background 0.10s',
+      }}
     >
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className="h-full w-full max-w-[480px] overflow-y-auto"
-        style={{
-          background: '#141414',
-          borderLeft: '1px solid rgba(255,255,255,0.07)',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-5"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <div>
-            <p
-              className="text-[0.60rem] tracking-[0.20em] uppercase font-semibold"
-              style={{ color: 'rgba(255,255,255,0.75)' }}
-            >
-              Order Details
-            </p>
-            <p
-              className="mt-0.5 text-[0.70rem] tracking-[0.06em] font-semibold"
-              style={{ color: GOLD }}
-            >
-              {order.orderNumber}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 transition-colors duration-100"
-            style={{
-              color: 'rgba(255,255,255,0.35)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = 'rgba(255,255,255,0.75)')
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')
-            }
+      {/* Checkbox */}
+      <td className="px-4 py-3 w-8">
+        <Checkbox checked={selected} onChange={onToggle} />
+      </td>
+
+      {/* Code */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="text-[0.56rem] tracking-[0.12em] font-bold font-mono whitespace-nowrap"
+            style={{ color: 'rgba(255,255,255,0.88)' }}
           >
-            <X size={13} strokeWidth={2} />
-          </button>
+            {code.code}
+          </span>
+          <CodeCopyButton code={code.code} />
         </div>
+      </td>
 
-        <div className="p-6 space-y-6">
-          {/* Status + Update */}
-          <div>
-            <p
-              className="text-[0.46rem] tracking-[0.18em] uppercase font-semibold mb-3"
-              style={{ color: 'rgba(255,255,255,0.22)' }}
+      {/* Description */}
+      <td className="px-4 py-3 max-w-[160px]">
+        <p
+          className="text-[0.52rem] tracking-[0.04em] line-clamp-2"
+          style={{ color: 'rgba(255,255,255,0.42)' }}
+        >
+          {code.description || '—'}
+        </p>
+      </td>
+
+      {/* Type */}
+      <td className="px-4 py-3">
+        <PromoTypeBadge type={code.type} />
+      </td>
+
+      {/* Discount Value */}
+      <td className="px-4 py-3">
+        <p
+          className="text-[0.56rem] tracking-[0.04em] font-semibold tabular-nums whitespace-nowrap"
+          style={{ color: GOLD }}
+        >
+          {getDiscountLabel(code)}
+        </p>
+      </td>
+
+      {/* Conditions */}
+      <td className="px-4 py-3">
+        <ConditionTags code={code} />
+      </td>
+
+      {/* Usage */}
+      <td className="px-4 py-3">
+        <UsageBar used={code.usedCount} max={code.maxUses} />
+      </td>
+
+      {/* Revenue Impact */}
+      <td className="px-4 py-3">
+        <p
+          className="text-[0.52rem] tracking-[0.04em] tabular-nums whitespace-nowrap"
+          style={{ color: 'rgba(239,68,68,0.72)' }}
+        >
+          {code.revenueImpact > 0 ? `−${formatNaira(code.revenueImpact)}` : '—'}
+        </p>
+      </td>
+
+      {/* Status */}
+      <td className="px-4 py-3">
+        <PromoStatusPill status={code.status} />
+      </td>
+
+      {/* Valid From */}
+      <td className="px-4 py-3">
+        <p
+          className="text-[0.50rem] tracking-[0.04em] whitespace-nowrap"
+          style={{ color: 'rgba(255,255,255,0.38)' }}
+        >
+          {formatDate(code.validFrom)}
+        </p>
+      </td>
+
+      {/* Expires */}
+      <td className="px-4 py-3">
+        <p
+          className="text-[0.50rem] tracking-[0.04em] whitespace-nowrap"
+          style={{
+            color: code.expiresAt
+              ? 'rgba(255,255,255,0.38)'
+              : 'rgba(255,255,255,0.18)',
+          }}
+        >
+          {code.expiresAt ? formatDate(code.expiresAt) : 'No Expiry'}
+        </p>
+      </td>
+
+      {/* Actions */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1">
+          {/* View Analytics */}
+          <Link
+            href={`/admin/promos/${code._id}`}
+            title="View analytics"
+            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+            style={{
+              color: 'rgba(255,255,255,0.28)',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+            }}
+          >
+            <Eye size={12} strokeWidth={1.8} />
+          </Link>
+
+          {/* Edit */}
+          <Link
+            href={`/admin/promos/${code._id}/edit`}
+            title="Edit promo code"
+            className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+            style={{
+              color: 'rgba(255,255,255,0.28)',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = GOLD;
+              e.currentTarget.style.background = 'rgba(180,130,60,0.06)';
+              e.currentTarget.style.borderColor = 'rgba(180,130,60,0.18)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+            }}
+          >
+            <Edit2 size={12} strokeWidth={1.8} />
+          </Link>
+
+          {/* More Actions dropdown */}
+          <div ref={actionsRef}>
+            <button
+              ref={triggerRef}
+              onClick={openActions}
+              title="More actions"
+              className="flex items-center justify-center w-7 h-7 transition-colors duration-100"
+              style={{
+                color: actionsOpen ? GOLD : 'rgba(255,255,255,0.28)',
+                background: actionsOpen
+                  ? 'rgba(180,130,60,0.06)'
+                  : 'transparent',
+                border: `1px solid ${actionsOpen ? 'rgba(180,130,60,0.18)' : 'rgba(255,255,255,0.06)'}`,
+              }}
+              onMouseEnter={(e) => {
+                if (!actionsOpen) {
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!actionsOpen) {
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.28)';
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                }
+              }}
             >
-              Order Status
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <OrderStatusPill status={order.status} />
-              {updating && (
-                <Loader2
-                  size={12}
-                  strokeWidth={1.8}
-                  className="animate-spin"
-                  style={{ color: GOLD }}
-                />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {NEXT_STATUSES.filter((s) => s !== order.status).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => handleStatus(s)}
-                  disabled={updating}
-                  className="h-6 px-2.5 text-[0.46rem] tracking-[0.10em] uppercase transition-colors duration-100"
+              <ChevronDown size={11} strokeWidth={1.8} />
+            </button>
+            <AnimatePresence>
+              {actionsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={{ duration: 0.12 }}
+                  className="fixed z-[200] py-1 min-w-[170px]"
                   style={{
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    background: 'rgba(255,255,255,0.02)',
-                    color: 'rgba(255,255,255,0.40)',
-                    cursor: updating ? 'not-allowed' : 'pointer',
+                    top: dropdownPos.top,
+                    right: dropdownPos.right,
+                    background: '#1C1C1C',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.50)',
                   }}
-                  onMouseEnter={(e) => {
-                    if (!updating) {
+                >
+                  {/* Duplicate */}
+                  <button
+                    onClick={() => {
+                      handleDuplicate();
+                      setActionsOpen(false);
+                    }}
+                    disabled={duplicating}
+                    className="w-full flex items-center gap-2 px-3 py-[7px] text-left text-[0.54rem] tracking-[0.08em] transition-colors duration-100"
+                    style={{
+                      color: 'rgba(255,255,255,0.52)',
+                      background: 'transparent',
+                    }}
+                    onMouseEnter={(e) => {
                       e.currentTarget.style.background =
-                        'rgba(255,255,255,0.06)';
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.72)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                    e.currentTarget.style.color = 'rgba(255,255,255,0.40)';
-                  }}
-                >
-                  → {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Customer */}
-          <div>
-            <p
-              className="text-[0.46rem] tracking-[0.18em] uppercase font-semibold mb-3"
-              style={{ color: 'rgba(255,255,255,0.22)' }}
-            >
-              Customer
-            </p>
-            <p
-              className="text-[0.58rem] tracking-[0.04em] font-medium"
-              style={{ color: 'rgba(255,255,255,0.78)' }}
-            >
-              {customerName}
-            </p>
-            <p
-              className="mt-0.5 text-[0.52rem] tracking-[0.04em]"
-              style={{ color: 'rgba(255,255,255,0.35)' }}
-            >
-              {order.contact.email}
-            </p>
-            <p
-              className="mt-0.5 text-[0.50rem] tracking-[0.04em]"
-              style={{ color: 'rgba(255,255,255,0.28)' }}
-            >
-              {order.contact.phone}
-            </p>
-          </div>
-
-          {/* Items */}
-          <div>
-            <p
-              className="text-[0.46rem] tracking-[0.18em] uppercase font-semibold mb-3"
-              style={{ color: 'rgba(255,255,255,0.22)' }}
-            >
-              Items
-            </p>
-            <div className="space-y-2">
-              {order.items.map((item, i) => (
-                <div
-                  key={i}
-                  className="flex items-start justify-between gap-3 py-2"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-                >
-                  <div>
-                    <p
-                      className="text-[0.56rem] tracking-[0.04em] font-medium"
-                      style={{ color: 'rgba(255,255,255,0.72)' }}
-                    >
-                      {item.name}
-                    </p>
-                    <p
-                      className="mt-0.5 text-[0.44rem] tracking-[0.08em]"
-                      style={{ color: 'rgba(255,255,255,0.28)' }}
-                    >
-                      {item.size} · qty {item.qty}
-                    </p>
-                  </div>
-                  <p
-                    className="text-[0.56rem] tracking-[0.04em] tabular-nums shrink-0"
-                    style={{ color: 'rgba(255,255,255,0.55)' }}
+                        'rgba(255,255,255,0.04)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.80)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.52)';
+                    }}
                   >
-                    {formatNaira(item.pricePerUnit * item.qty)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+                    {duplicating ? (
+                      <Loader2
+                        size={11}
+                        strokeWidth={1.8}
+                        className="animate-spin shrink-0"
+                      />
+                    ) : (
+                      <Copy size={11} strokeWidth={1.8} className="shrink-0" />
+                    )}
+                    Duplicate
+                  </button>
 
-          {/* Pricing */}
-          <div>
-            <p
-              className="text-[0.46rem] tracking-[0.18em] uppercase font-semibold mb-3"
-              style={{ color: 'rgba(255,255,255,0.22)' }}
-            >
-              Pricing
-            </p>
-            <div className="space-y-1.5">
-              {[
-                { label: 'Subtotal', val: order.pricing.subtotal },
-                {
-                  label: 'Discount',
-                  val: -order.pricing.discount,
-                  hide: order.pricing.discount === 0,
-                },
-                { label: 'Delivery', val: order.pricing.deliveryFee },
-              ]
-                .filter((r) => !r.hide)
-                .map((row) => (
+                  {/* Disable / Enable */}
+                  <button
+                    onClick={() => {
+                      handleToggleStatus();
+                      setActionsOpen(false);
+                    }}
+                    disabled={toggling || code.status === 'expired'}
+                    className="w-full flex items-center gap-2 px-3 py-[7px] text-left text-[0.54rem] tracking-[0.08em] transition-colors duration-100"
+                    style={{
+                      color: 'rgba(255,255,255,0.52)',
+                      background: 'transparent',
+                      cursor:
+                        code.status === 'expired' ? 'not-allowed' : 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (code.status !== 'expired') {
+                        e.currentTarget.style.background =
+                          'rgba(255,255,255,0.04)';
+                        e.currentTarget.style.color = 'rgba(255,255,255,0.80)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.52)';
+                    }}
+                  >
+                    {toggling ? (
+                      <Loader2
+                        size={11}
+                        strokeWidth={1.8}
+                        className="animate-spin shrink-0"
+                      />
+                    ) : code.status === 'disabled' ? (
+                      <ToggleRight
+                        size={11}
+                        strokeWidth={1.8}
+                        className="shrink-0"
+                      />
+                    ) : (
+                      <ToggleLeft
+                        size={11}
+                        strokeWidth={1.8}
+                        className="shrink-0"
+                      />
+                    )}
+                    {code.status === 'disabled' ? 'Enable' : 'Disable'}
+                  </button>
+
+                  {/* Archive */}
                   <div
-                    key={row.label}
-                    className="flex items-center justify-between"
+                    style={{
+                      borderTop: '1px solid rgba(255,255,255,0.06)',
+                      marginTop: '4px',
+                      paddingTop: '4px',
+                    }}
                   >
-                    <p
-                      className="text-[0.50rem] tracking-[0.06em]"
-                      style={{ color: 'rgba(255,255,255,0.35)' }}
-                    >
-                      {row.label}
-                    </p>
-                    <p
-                      className="text-[0.52rem] tracking-[0.04em] tabular-nums"
+                    <button
+                      onClick={() => {
+                        if (canArchive) {
+                          handleArchive();
+                          setActionsOpen(false);
+                        }
+                      }}
+                      disabled={!canArchive || archiving}
+                      className="w-full flex items-center gap-2 px-3 py-[7px] text-left text-[0.54rem] tracking-[0.08em] transition-colors duration-100"
                       style={{
-                        color:
-                          row.val < 0
-                            ? 'rgba(74,222,128,0.70)'
-                            : 'rgba(255,255,255,0.50)',
+                        color: canArchive
+                          ? 'rgba(239,68,68,0.62)'
+                          : 'rgba(255,255,255,0.18)',
+                        background: 'transparent',
+                        cursor: !canArchive ? 'not-allowed' : 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (canArchive) {
+                          e.currentTarget.style.background =
+                            'rgba(239,68,68,0.06)';
+                          e.currentTarget.style.color = 'rgba(239,68,68,0.85)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = canArchive
+                          ? 'rgba(239,68,68,0.62)'
+                          : 'rgba(255,255,255,0.18)';
                       }}
                     >
-                      {row.val < 0 ? '−' : ''}
-                      {formatNaira(Math.abs(row.val))}
-                    </p>
+                      {archiving ? (
+                        <Loader2
+                          size={11}
+                          strokeWidth={1.8}
+                          className="animate-spin shrink-0"
+                        />
+                      ) : (
+                        <Archive
+                          size={11}
+                          strokeWidth={1.8}
+                          className="shrink-0"
+                        />
+                      )}
+                      Archive
+                      {!canArchive && (
+                        <span
+                          className="text-[0.40rem] ml-auto"
+                          style={{ color: 'rgba(255,255,255,0.18)' }}
+                        >
+                          has usage
+                        </span>
+                      )}
+                    </button>
                   </div>
-                ))}
-              <div
-                className="flex items-center justify-between pt-2"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
-              >
-                <p
-                  className="text-[0.52rem] tracking-[0.08em] font-semibold"
-                  style={{ color: 'rgba(255,255,255,0.65)' }}
-                >
-                  Total
-                </p>
-                <p
-                  className="text-[0.62rem] tracking-[0.04em] font-semibold tabular-nums"
-                  style={{ color: 'rgba(255,255,255,0.85)' }}
-                >
-                  {formatNaira(order.pricing.total)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment */}
-          <div>
-            <p
-              className="text-[0.46rem] tracking-[0.18em] uppercase font-semibold mb-3"
-              style={{ color: 'rgba(255,255,255,0.22)' }}
-            >
-              Payment
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <PaymentMethodBadge method={order.payment.method} />
-              <PaymentStatusPill status={order.payment.status} />
-            </div>
-            {order.payment.paidAt && (
-              <p
-                className="mt-1.5 text-[0.46rem] tracking-[0.06em]"
-                style={{ color: 'rgba(255,255,255,0.25)' }}
-              >
-                Paid {formatDate(order.payment.paidAt)}
-              </p>
-            )}
-          </div>
-
-          {/* Dates */}
-          <div className="flex gap-6">
-            <div>
-              <p
-                className="text-[0.44rem] tracking-[0.14em] uppercase"
-                style={{ color: 'rgba(255,255,255,0.18)' }}
-              >
-                Placed
-              </p>
-              <p
-                className="mt-1 text-[0.52rem] tracking-[0.04em]"
-                style={{ color: 'rgba(255,255,255,0.42)' }}
-              >
-                {formatDate(order.createdAt)}
-              </p>
-            </div>
-            <div>
-              <p
-                className="text-[0.44rem] tracking-[0.14em] uppercase"
-                style={{ color: 'rgba(255,255,255,0.18)' }}
-              >
-                Updated
-              </p>
-              <p
-                className="mt-1 text-[0.52rem] tracking-[0.04em]"
-                style={{ color: 'rgba(255,255,255,0.42)' }}
-              >
-                {formatDate(order.updatedAt)}
-              </p>
-            </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </td>
+    </tr>
   );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-export default function AdminOrdersPage() {
+export default function AdminPromosPage() {
   const router = useRouter();
 
-  // ── Admin auth ──────────────────────────────────────────────────────────────
+  // ── Auth ────────────────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // ── Data ────────────────────────────────────────────────────────────────────
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [codes, setCodes] = useState<AdminPromoCode[]>([]);
+  const [stats, setStats] = useState<PromoStats | null>(null);
   const [totalItems, setTotalItems] = useState(0);
-  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [codesLoading, setCodesLoading] = useState(true);
 
   // ── Filters ─────────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState<'all' | OrderStatus>('all');
-  const [paymentMethod, setPaymentMethod] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState('');
-  const [dateRange, setDateRange] = useState<DateRange>('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [amountMin, setAmountMin] = useState('');
-  const [amountMax, setAmountMax] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterEligibility, setFilterEligibility] = useState('');
+  const [filterUsage, setFilterUsage] = useState('');
+  const [filterExpiry, setFilterExpiry] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // ── Selection + bulk ────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkDropdownPos, setBulkDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const bulkRef     = useRef<HTMLDivElement>(null);
-  const bulkTrigger = useRef<HTMLButtonElement>(null);
-
-  // ── Detail drawer ────────────────────────────────────────────────────────────
-  const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
+  const bulkRef = useRef<HTMLDivElement>(null);
 
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   const activeFilterCount = [
-    paymentMethod !== '',
-    paymentStatus !== '',
-    dateRange !== 'all',
-    amountMin !== '',
-    amountMax !== '',
+    filterStatus !== '',
+    filterType !== '',
+    filterEligibility !== '',
+    filterUsage !== '',
+    filterExpiry !== '',
   ].filter(Boolean).length;
 
   // ── Auth check ──────────────────────────────────────────────────────────────
@@ -1454,78 +1338,60 @@ export default function AdminOrdersPage() {
     };
   }, [router]);
 
-  // ── Fetch orders ─────────────────────────────────────────────────────────────
-  const fetchOrders = useCallback(async () => {
-    setOrdersLoading(true);
+  // ── Fetch codes ─────────────────────────────────────────────────────────────
+  const fetchCodes = useCallback(async () => {
+    setCodesLoading(true);
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
       sort,
       ...(search && { q: search }),
-      ...(statusTab !== 'all' && { status: statusTab }),
-      ...(paymentMethod && { paymentMethod }),
-      ...(paymentStatus && { paymentStatus }),
-      ...(dateRange !== 'all' && { dateRange }),
-      ...(dateFrom && { dateFrom }),
-      ...(dateTo && { dateTo }),
-      ...(amountMin && { amountMin }),
-      ...(amountMax && { amountMax }),
+      ...(filterStatus && { status: filterStatus }),
+      ...(filterType && { type: filterType }),
+      ...(filterEligibility && { eligibility: filterEligibility }),
+      ...(filterUsage && { usage: filterUsage }),
+      ...(filterExpiry && { expiry: filterExpiry }),
     });
-
     try {
-      const res = await fetch(`/api/admin/orders?${params.toString()}`);
+      const res = await fetch(`/api/admin/promos?${params.toString()}`);
       if (!res.ok) return;
       const json = (await res.json()) as {
-        data?: {
-          orders: AdminOrder[];
-          total: number;
-          statusCounts: Record<string, number>;
-          stats: Stats;
-        };
+        data?: { codes: AdminPromoCode[]; total: number; stats: PromoStats };
       };
       if (json.data) {
-        setOrders(json.data.orders);
+        setCodes(json.data.codes);
         setTotalItems(json.data.total);
-        setStatusCounts(json.data.statusCounts);
         setStats(json.data.stats);
       }
     } catch {
       /* ignore */
     } finally {
-      setOrdersLoading(false);
+      setCodesLoading(false);
     }
   }, [
     page,
     pageSize,
     sort,
     search,
-    statusTab,
-    paymentMethod,
-    paymentStatus,
-    dateRange,
-    dateFrom,
-    dateTo,
-    amountMin,
-    amountMax,
+    filterStatus,
+    filterType,
+    filterEligibility,
+    filterUsage,
+    filterExpiry,
   ]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
-
-  // Reset page on filter change
+    fetchCodes();
+  }, [fetchCodes]);
   useEffect(() => {
     setPage(1);
   }, [
     search,
-    statusTab,
-    paymentMethod,
-    paymentStatus,
-    dateRange,
-    dateFrom,
-    dateTo,
-    amountMin,
-    amountMax,
+    filterStatus,
+    filterType,
+    filterEligibility,
+    filterUsage,
+    filterExpiry,
     sort,
     pageSize,
   ]);
@@ -1541,29 +1407,21 @@ export default function AdminOrdersPage() {
     return () => document.removeEventListener('mousedown', handle);
   }, [bulkOpen]);
 
-  function openBulkDropdown() {
-    if (bulkTrigger.current) {
-      const rect = bulkTrigger.current.getBoundingClientRect();
-      setBulkDropdownPos({ top: rect.bottom + 4, left: rect.left });
-    }
-    setBulkOpen((o) => !o);
-  }
-
   // ── Selection helpers ─────────────────────────────────────────────────────────
   const allOnPageSelected =
-    orders.length > 0 && orders.every((o) => selected.has(o._id));
+    codes.length > 0 && codes.every((c) => selected.has(c._id));
 
   function toggleAll() {
     if (allOnPageSelected) {
       setSelected((prev) => {
         const next = new Set(prev);
-        orders.forEach((o) => next.delete(o._id));
+        codes.forEach((c) => next.delete(c._id));
         return next;
       });
     } else {
       setSelected((prev) => {
         const next = new Set(prev);
-        orders.forEach((o) => next.add(o._id));
+        codes.forEach((c) => next.add(c._id));
         return next;
       });
     }
@@ -1577,72 +1435,89 @@ export default function AdminOrdersPage() {
     });
   }
 
+  // ── Actions ───────────────────────────────────────────────────────────────────
+  async function handleToggleStatus(id: string, enable: boolean) {
+    try {
+      const res = await fetch(`/api/admin/promos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: enable ? 'active' : 'disabled' }),
+      });
+      if (!res.ok) return;
+      setCodes((prev) =>
+        prev.map((c) =>
+          c._id === id ? { ...c, status: enable ? 'active' : 'disabled' } : c,
+        ),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleDuplicate(id: string) {
+    try {
+      const res = await fetch(`/api/admin/promos/${id}/duplicate`, {
+        method: 'POST',
+      });
+      if (!res.ok) return;
+      fetchCodes();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleArchive(id: string) {
+    try {
+      const res = await fetch(`/api/admin/promos/${id}/archive`, {
+        method: 'PATCH',
+      });
+      if (!res.ok) return;
+      setCodes((prev) => prev.filter((c) => c._id !== id));
+      setTotalItems((n) => n - 1);
+    } catch {
+      /* ignore */
+    }
+  }
+
   // ── Bulk apply ────────────────────────────────────────────────────────────────
   async function applyBulk() {
     if (!bulkAction || selected.size === 0) return;
     const ids = Array.from(selected);
 
     if (bulkAction === 'export') {
-      const toExport = orders.filter((o) => ids.includes(o._id));
-      exportOrdersToCSV(toExport);
+      const toExport = codes.filter((c) => ids.includes(c._id));
+      exportCodesToCSV(toExport);
+      setSelected(new Set());
+      setBulkAction('');
       return;
     }
-    if (bulkAction === 'print') {
-      window.print();
-      return;
-    }
-
-    // Status update
-    const VALID_STATUS_ACTIONS = [
-      'processing',
-      'shipped',
-      'delivered',
-      'cancelled',
-    ];
-    if (!VALID_STATUS_ACTIONS.includes(bulkAction)) return;
 
     setBulkLoading(true);
-    await Promise.all(
-      ids.map((id) => handleStatusChange(id, bulkAction as OrderStatus)),
-    );
+    if (bulkAction === 'enable') {
+      await Promise.all(ids.map((id) => handleToggleStatus(id, true)));
+    } else if (bulkAction === 'disable') {
+      await Promise.all(ids.map((id) => handleToggleStatus(id, false)));
+    } else if (bulkAction === 'archive') {
+      const archivable = codes.filter(
+        (c) => ids.includes(c._id) && c.usedCount === 0,
+      );
+      await Promise.all(archivable.map((c) => handleArchive(c._id)));
+    }
     setBulkLoading(false);
     setSelected(new Set());
     setBulkAction('');
   }
 
-  // ── Status change (single) ───────────────────────────────────────────────────
-  async function handleStatusChange(id: string, newStatus: OrderStatus) {
-    try {
-      const res = await fetch(`/api/admin/orders/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) return;
-      setOrders((prev) =>
-        prev.map((o) => (o._id === id ? { ...o, status: newStatus } : o)),
-      );
-      if (detailOrder?._id === id)
-        setDetailOrder((prev) =>
-          prev ? { ...prev, status: newStatus } : prev,
-        );
-    } catch {
-      /* ignore */
-    }
-  }
-
   // ── Clear filters ─────────────────────────────────────────────────────────────
   function clearFilters() {
-    setPaymentMethod('');
-    setPaymentStatus('');
-    setDateRange('all');
-    setDateFrom('');
-    setDateTo('');
-    setAmountMin('');
-    setAmountMax('');
+    setFilterStatus('');
+    setFilterType('');
+    setFilterEligibility('');
+    setFilterUsage('');
+    setFilterExpiry('');
   }
 
-  // ── Pagination pages ──────────────────────────────────────────────────────────
+  // ── Pagination ────────────────────────────────────────────────────────────────
   const [jumpValue, setJumpValue] = useState('');
   function handleJump(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
@@ -1664,7 +1539,6 @@ export default function AdminOrdersPage() {
     return pages;
   }
 
-  // ── Names ─────────────────────────────────────────────────────────────────────
   const adminFullName = adminUser
     ? `${adminUser.firstName} ${adminUser.lastName}`
     : '—';
@@ -1690,28 +1564,6 @@ export default function AdminOrdersPage() {
     );
   }
 
-  const DATE_RANGE_OPTIONS = [
-    { value: 'all', label: 'All Time' },
-    { value: 'today', label: 'Today' },
-    { value: 'week', label: 'This Week' },
-    { value: 'month', label: 'This Month' },
-    { value: 'custom', label: 'Custom Range' },
-  ] as const;
-
-  const PAYMENT_METHOD_OPTIONS = [
-    { value: '', label: 'All Methods' },
-    { value: 'paystack', label: 'Paystack' },
-    { value: 'bank-transfer', label: 'Bank Transfer' },
-  ] as const;
-
-  const PAYMENT_STATUS_OPTIONS = [
-    { value: '', label: 'All Statuses' },
-    { value: 'paid', label: 'Paid' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'refunded', label: 'Refunded' },
-  ] as const;
-
   return (
     <div className="min-h-screen" style={{ background: '#0F0F0F' }}>
       {/* Sidebar */}
@@ -1726,7 +1578,7 @@ export default function AdminOrdersPage() {
       {/* Content */}
       <div className="lg:pl-55 flex flex-col min-h-screen">
         <AdminTopNav
-          pageTitle="Orders Management"
+          pageTitle="Promo Codes"
           adminName={adminShortName}
           avatarUrl={adminUser?.avatar}
           onMenuToggle={() => setSidebarOpen((o) => !o)}
@@ -1742,7 +1594,7 @@ export default function AdminOrdersPage() {
                     className="text-[0.70rem] tracking-[0.24em] uppercase font-semibold"
                     style={{ color: 'rgba(255,255,255,0.85)' }}
                   >
-                    Orders Management
+                    Promo Codes Management
                   </h1>
                   <span
                     className="flex items-center h-5 px-2 text-[0.46rem] tracking-[0.12em] uppercase font-semibold"
@@ -1752,32 +1604,29 @@ export default function AdminOrdersPage() {
                       border: '1px solid rgba(255,255,255,0.07)',
                     }}
                   >
-                    {stats ? stats.totalOrders : '—'} Orders
+                    {stats ? stats.total : '—'} Promo Codes
                   </span>
                 </div>
                 <p
                   className="text-[0.54rem] tracking-[0.08em]"
                   style={{ color: 'rgba(255,255,255,0.25)' }}
                 >
-                  Manage, track, and fulfil customer orders.
+                  Create, manage, and track all discount codes and their
+                  performance.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <HeaderButton
-                  icon={<RefreshCw size={12} strokeWidth={1.8} />}
-                  label="Refresh"
-                  onClick={fetchOrders}
-                />
-                <HeaderButton
                   icon={<Download size={12} strokeWidth={1.8} />}
-                  label="Export Orders"
-                  onClick={() => exportOrdersToCSV(orders)}
+                  label="Export Report"
+                  onClick={() => exportCodesToCSV(codes)}
                 />
                 <HeaderButton
-                  icon={<Printer size={12} strokeWidth={1.8} />}
-                  label="Print All"
-                  onClick={() => window.print()}
+                  icon={<Plus size={12} strokeWidth={2} />}
+                  label="Create Promo Code"
+                  accent
+                  href="/admin/promos/new"
                 />
               </div>
             </div>
@@ -1785,44 +1634,52 @@ export default function AdminOrdersPage() {
             {/* ── Key Stats Bar ─────────────────────────────────────────────── */}
             <div className="flex gap-3 flex-wrap">
               <StatCard
-                value={stats ? String(stats.totalOrders) : '—'}
-                label="Total Orders"
-                sub="All Time"
-                color="neutral"
-              />
-              <StatCard
-                value={stats ? String(stats.pendingOrders) : '—'}
-                label="Pending Orders"
-                sub="Awaiting Processing"
-                color="amber"
-                onClick={() => {
-                  setStatusTab('pending');
-                  setPage(1);
-                }}
-              />
-              <StatCard
-                value={stats ? String(stats.pendingBankTransfers) : '—'}
-                label="Pending Bank Transfers"
-                sub="Awaiting Verification"
-                color="red"
-                urgent={!!(stats && stats.pendingBankTransfers > 0)}
-                onClick={() => {
-                  setPaymentMethod('bank-transfer');
-                  setPaymentStatus('pending');
-                  setPage(1);
-                }}
-              />
-              <StatCard
-                value={stats ? String(stats.todayOrders) : '—'}
-                label="Today's Orders"
-                sub="Placed Today"
+                value={stats ? String(stats.active) : '—'}
+                label="Currently Active"
+                sub="Live promo codes"
                 color="green"
+                onClick={() => {
+                  setFilterStatus('active');
+                  setPage(1);
+                }}
               />
               <StatCard
-                value={stats ? formatNaira(stats.totalRevenue) : '—'}
-                label="Total Revenue"
-                sub="All Time Revenue"
+                value={stats ? String(stats.expired) : '—'}
+                label="Expired"
+                sub="Past their end date"
+                color="gray"
+                onClick={() => {
+                  setFilterStatus('expired');
+                  setPage(1);
+                }}
+              />
+              <StatCard
+                value={stats ? String(stats.scheduled) : '—'}
+                label="Scheduled (Not Yet Active)"
+                sub="Future start date"
+                color="blue"
+                onClick={() => {
+                  setFilterStatus('scheduled');
+                  setPage(1);
+                }}
+              />
+              <StatCard
+                value={stats ? stats.totalUsesThisMonth.toLocaleString() : '—'}
+                label="Code Uses This Month"
+                sub="Total redemptions"
                 color="gold"
+              />
+              <StatCard
+                value={stats ? formatNaira(stats.discountThisMonth) : '—'}
+                label="Discount Given This Month"
+                sub="Revenue impact"
+                color="amber"
+              />
+              <StatCard
+                value={stats?.topCode ?? '—'}
+                label="Most Used This Month"
+                sub="Top performing code"
+                color="neutral"
               />
             </div>
 
@@ -1838,7 +1695,7 @@ export default function AdminOrdersPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by order number, customer name, or email..."
+                placeholder="Search by code name or description..."
                 className="w-full h-10 pl-9 pr-9 text-[0.58rem] tracking-[0.06em] outline-none transition-all duration-150"
                 style={{
                   background: '#1A1A1A',
@@ -1879,174 +1736,38 @@ export default function AdminOrdersPage() {
               </AnimatePresence>
             </div>
 
-            {/* ── Status Tabs ───────────────────────────────────────────────── */}
-            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-              <div
-                className="flex items-center gap-0"
-                style={{ minWidth: 'max-content' }}
-              >
-                {STATUS_TABS.map((tab) => {
-                  const count =
-                    tab.value === 'all'
-                      ? (stats?.totalOrders ?? 0)
-                      : (statusCounts[tab.value] ?? 0);
-                  const active = statusTab === tab.value;
-                  return (
-                    <button
-                      key={tab.value}
-                      onClick={() => {
-                        setStatusTab(tab.value);
-                        setPage(1);
-                      }}
-                      className="flex items-center gap-1.5 h-9 px-4 text-[0.52rem] tracking-[0.10em] uppercase transition-colors duration-150 whitespace-nowrap"
-                      style={{
-                        borderBottom: `2px solid ${active ? GOLD : 'transparent'}`,
-                        color: active ? GOLD : 'rgba(255,255,255,0.32)',
-                        background: active
-                          ? 'rgba(180,130,60,0.04)'
-                          : 'transparent',
-                      }}
-                    >
-                      {tab.label}
-                      <span
-                        className="flex items-center justify-center min-w-[18px] h-4 px-1 text-[0.40rem] tracking-[0.06em] font-semibold"
-                        style={{
-                          background: active
-                            ? 'rgba(180,130,60,0.20)'
-                            : 'rgba(255,255,255,0.07)',
-                          color: active ? GOLD : 'rgba(255,255,255,0.28)',
-                          border: `1px solid ${active ? 'rgba(180,130,60,0.25)' : 'rgba(255,255,255,0.08)'}`,
-                        }}
-                      >
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div
-                style={{
-                  height: '1px',
-                  background: 'rgba(255,255,255,0.06)',
-                  marginTop: '-1px',
-                }}
-              />
-            </div>
-
-            {/* ── Secondary Filters + Sort ──────────────────────────────────── */}
+            {/* ── Filter & Sort Bar ─────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-2">
               <FilterDropdown
-                label="Payment Method"
-                value={paymentMethod}
-                options={PAYMENT_METHOD_OPTIONS}
-                onChange={setPaymentMethod}
+                label="Status"
+                value={filterStatus}
+                options={STATUS_OPTIONS}
+                onChange={setFilterStatus}
               />
               <FilterDropdown
-                label="Payment Status"
-                value={paymentStatus}
-                options={PAYMENT_STATUS_OPTIONS}
-                onChange={setPaymentStatus}
+                label="Type"
+                value={filterType}
+                options={TYPE_OPTIONS}
+                onChange={setFilterType}
               />
-
-              {/* Date Range */}
-              <div className="relative" ref={undefined}>
-                <FilterDropdown
-                  label="Date Range"
-                  value={dateRange}
-                  options={DATE_RANGE_OPTIONS}
-                  onChange={(v) => {
-                    setDateRange(v as DateRange);
-                    if (v === 'custom') setDatePickerOpen(true);
-                    else {
-                      setDateFrom('');
-                      setDateTo('');
-                      setDatePickerOpen(false);
-                    }
-                  }}
-                />
-              </div>
-
-              {/* Custom date picker */}
-              <AnimatePresence>
-                {dateRange === 'custom' && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -6 }}
-                    transition={{ duration: 0.12 }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="h-8 px-2 text-[0.52rem] tracking-[0.06em] outline-none"
-                      style={{
-                        background: '#1A1A1A',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: 'rgba(255,255,255,0.55)',
-                        colorScheme: 'dark',
-                      }}
-                    />
-                    <span
-                      className="text-[0.44rem]"
-                      style={{ color: 'rgba(255,255,255,0.20)' }}
-                    >
-                      —
-                    </span>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="h-8 px-2 text-[0.52rem] tracking-[0.06em] outline-none"
-                      style={{
-                        background: '#1A1A1A',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: 'rgba(255,255,255,0.55)',
-                        colorScheme: 'dark',
-                      }}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Amount Range */}
-              <div
-                className="flex items-center gap-1 h-8 px-3"
-                style={{
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(255,255,255,0.02)',
-                }}
-              >
-                <span
-                  className="text-[0.50rem] tracking-[0.08em] shrink-0"
-                  style={{ color: 'rgba(255,255,255,0.22)' }}
-                >
-                  ₦
-                </span>
-                <input
-                  type="number"
-                  value={amountMin}
-                  onChange={(e) => setAmountMin(e.target.value)}
-                  placeholder="Min"
-                  className="w-14 bg-transparent outline-none text-[0.56rem] tracking-[0.06em] tabular-nums"
-                  style={{ color: 'rgba(255,255,255,0.55)' }}
-                />
-                <span
-                  className="text-[0.44rem] shrink-0 px-0.5"
-                  style={{ color: 'rgba(255,255,255,0.16)' }}
-                >
-                  —
-                </span>
-                <input
-                  type="number"
-                  value={amountMax}
-                  onChange={(e) => setAmountMax(e.target.value)}
-                  placeholder="Max"
-                  className="w-14 bg-transparent outline-none text-[0.56rem] tracking-[0.06em] tabular-nums"
-                  style={{ color: 'rgba(255,255,255,0.55)' }}
-                />
-              </div>
+              <FilterDropdown
+                label="Eligibility"
+                value={filterEligibility}
+                options={ELIGIBILITY_OPTIONS}
+                onChange={setFilterEligibility}
+              />
+              <FilterDropdown
+                label="Usage"
+                value={filterUsage}
+                options={USAGE_OPTIONS}
+                onChange={setFilterUsage}
+              />
+              <FilterDropdown
+                label="Expiry"
+                value={filterExpiry}
+                options={EXPIRY_OPTIONS}
+                onChange={setFilterExpiry}
+              />
 
               {/* Divider */}
               <div
@@ -2124,15 +1845,14 @@ export default function AdminOrdersPage() {
                     className="text-[0.52rem] tracking-[0.08em] font-medium"
                     style={{ color: GOLD }}
                   >
-                    {selected.size} {selected.size === 1 ? 'order' : 'orders'}{' '}
+                    {selected.size} {selected.size === 1 ? 'code' : 'codes'}{' '}
                     selected
                   </span>
 
                   {/* Bulk action dropdown */}
-                  <div ref={bulkRef}>
+                  <div className="relative" ref={bulkRef}>
                     <button
-                      ref={bulkTrigger}
-                      onClick={openBulkDropdown}
+                      onClick={() => setBulkOpen((o) => !o)}
                       className="flex items-center gap-1.5 h-8 px-3 text-[0.54rem] tracking-[0.10em] transition-colors duration-150"
                       style={{
                         border: '1px solid rgba(255,255,255,0.10)',
@@ -2164,10 +1884,8 @@ export default function AdminOrdersPage() {
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -4, scale: 0.98 }}
                           transition={{ duration: 0.12 }}
-                          className="fixed z-[200] min-w-[220px] py-1"
+                          className="absolute top-[calc(100%+4px)] left-0 z-50 min-w-[240px] py-1"
                           style={{
-                            top:  bulkDropdownPos.top,
-                            left: bulkDropdownPos.left,
                             background: '#1E1E1E',
                             border: '1px solid rgba(255,255,255,0.08)',
                             boxShadow: '0 8px 24px rgba(0,0,0,0.55)',
@@ -2267,7 +1985,7 @@ export default function AdminOrdersPage() {
               )}
             </AnimatePresence>
 
-            {/* ── Orders Table ──────────────────────────────────────────────── */}
+            {/* ── Promo Codes Table ─────────────────────────────────────────── */}
             <div
               style={{
                 border: '1px solid rgba(255,255,255,0.06)',
@@ -2292,7 +2010,7 @@ export default function AdminOrdersPage() {
                   <span style={{ color: 'rgba(255,255,255,0.50)' }}>
                     {totalItems}
                   </span>{' '}
-                  orders
+                  codes
                 </p>
                 <div className="flex items-center gap-2 shrink-0">
                   <span
@@ -2334,7 +2052,7 @@ export default function AdminOrdersPage() {
 
               {/* Table */}
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full" style={{ minWidth: '1100px' }}>
                   <thead>
                     <tr
                       style={{
@@ -2349,18 +2067,21 @@ export default function AdminOrdersPage() {
                         />
                       </th>
                       {[
-                        { label: 'Order', cls: 'px-4' },
-                        { label: 'Customer', cls: 'px-4' },
-                        { label: 'Items', cls: 'px-4' },
-                        { label: 'Total', cls: 'px-4' },
-                        { label: 'Payment', cls: 'px-4' },
-                        { label: 'Delivery', cls: 'px-4' },
-                        { label: 'Status', cls: 'px-4' },
-                        { label: 'Actions', cls: 'px-4' },
+                        { label: 'Code' },
+                        { label: 'Description' },
+                        { label: 'Type' },
+                        { label: 'Discount' },
+                        { label: 'Conditions' },
+                        { label: 'Usage' },
+                        { label: 'Revenue Impact' },
+                        { label: 'Status' },
+                        { label: 'Valid From' },
+                        { label: 'Expires' },
+                        { label: 'Actions' },
                       ].map((col) => (
                         <th
                           key={col.label}
-                          className={`${col.cls} py-3 text-left text-[0.46rem] tracking-[0.18em] uppercase font-semibold`}
+                          className="px-4 py-3 text-left text-[0.46rem] tracking-[0.18em] uppercase font-semibold whitespace-nowrap"
                           style={{ color: 'rgba(255,255,255,0.20)' }}
                         >
                           {col.label}
@@ -2369,9 +2090,9 @@ export default function AdminOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ordersLoading ? (
+                    {codesLoading ? (
                       <tr>
-                        <td colSpan={9} className="px-5 py-14 text-center">
+                        <td colSpan={12} className="px-5 py-14 text-center">
                           <Loader2
                             size={18}
                             strokeWidth={1.8}
@@ -2380,40 +2101,46 @@ export default function AdminOrdersPage() {
                           />
                         </td>
                       </tr>
-                    ) : orders.length === 0 ? (
+                    ) : codes.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-5 py-14 text-center">
-                          <p
-                            className="text-[0.56rem] tracking-[0.10em]"
-                            style={{ color: 'rgba(255,255,255,0.18)' }}
-                          >
-                            No orders match your search or filters.
-                          </p>
-                          {(search ||
-                            activeFilterCount > 0 ||
-                            statusTab !== 'all') && (
-                            <button
-                              onClick={() => {
-                                setSearch('');
-                                clearFilters();
-                                setStatusTab('all');
-                              }}
-                              className="mt-3 text-[0.52rem] tracking-[0.12em] underline underline-offset-2"
-                              style={{ color: 'rgba(180,130,60,0.60)' }}
+                        <td colSpan={12} className="px-5 py-14 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <Tag
+                              size={24}
+                              strokeWidth={1.2}
+                              style={{ color: 'rgba(255,255,255,0.12)' }}
+                            />
+                            <p
+                              className="text-[0.56rem] tracking-[0.10em]"
+                              style={{ color: 'rgba(255,255,255,0.18)' }}
                             >
-                              Clear all
-                            </button>
-                          )}
+                              No promo codes match your search or filters.
+                            </p>
+                            {(search || activeFilterCount > 0) && (
+                              <button
+                                onClick={() => {
+                                  setSearch('');
+                                  clearFilters();
+                                }}
+                                className="text-[0.52rem] tracking-[0.12em] underline underline-offset-2"
+                                style={{ color: 'rgba(180,130,60,0.60)' }}
+                              >
+                                Clear all
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
-                      orders.map((order) => (
-                        <OrderRow
-                          key={order._id}
-                          order={order}
-                          selected={selected.has(order._id)}
-                          onToggle={() => toggleOne(order._id)}
-                          onStatusChange={handleStatusChange}
+                      codes.map((code) => (
+                        <PromoCodeRow
+                          key={code._id}
+                          code={code}
+                          selected={selected.has(code._id)}
+                          onToggle={() => toggleOne(code._id)}
+                          onToggleStatus={handleToggleStatus}
+                          onDuplicate={handleDuplicate}
+                          onArchive={handleArchive}
                         />
                       ))
                     )}
@@ -2441,7 +2168,7 @@ export default function AdminOrdersPage() {
                       <span style={{ color: 'rgba(255,255,255,0.50)' }}>
                         {totalItems}
                       </span>{' '}
-                      orders
+                      codes
                     </p>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
@@ -2525,17 +2252,6 @@ export default function AdminOrdersPage() {
           </div>
         </main>
       </div>
-
-      {/* ── Order Detail Drawer ────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {detailOrder && (
-          <OrderDetailDrawer
-            order={detailOrder}
-            onClose={() => setDetailOrder(null)}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

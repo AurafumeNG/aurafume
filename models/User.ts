@@ -40,6 +40,7 @@ export interface IUser extends Document {
   provider: 'local' | 'google';
   googleId?: string;
   isVerified: boolean;
+  isSuspended?: boolean;
   verificationToken?: string;
   verificationTokenExpiry?: Date;
   resetPasswordToken?: string;
@@ -121,6 +122,10 @@ const UserSchema = new Schema<IUser>(
       sparse: true,   // allows multiple null values while keeping uniqueness for set values
     },
     isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isSuspended: {
       type: Boolean,
       default: false,
     },

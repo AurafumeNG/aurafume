@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2,
   Clock,
@@ -11,6 +11,9 @@ import {
   Check,
   ArrowRight,
   Package,
+  Upload,
+  X,
+  Loader2,
 } from 'lucide-react';
 import type { IOrder } from '@/models/Order';
 import Image from 'next/image';
@@ -87,15 +90,218 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// ── Proof of payment uploader ───────────────────────────────────────────────────
+
+type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+
+async function uploadProofToCloudinary(file: File): Promise<string> {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '';
+  const preset    = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? '';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', preset);
+  fd.append('folder', 'aurafumeng/proofs');
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+    { method: 'POST', body: fd },
+  );
+
+  if (!res.ok) throw new Error(`Cloudinary upload failed (${res.status})`);
+
+  const data = (await res.json()) as { secure_url?: string };
+  if (!data.secure_url) throw new Error('Cloudinary response missing secure_url');
+
+  return data.secure_url;
+}
+
+function ProofUploader({ orderId }: { orderId: string }) {
+  const inputRef                          = useRef<HTMLInputElement>(null);
+  const [file, setFile]                   = useState<File | null>(null);
+  const [preview, setPreview]             = useState<string | null>(null);
+  const [uploadState, setUploadState]     = useState<UploadState>('idle');
+  const [errorMsg, setErrorMsg]           = useState('');
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+
+    if (!picked.type.startsWith('image/')) {
+      setErrorMsg('Please select an image file (JPG, PNG, WEBP, etc.).');
+      return;
+    }
+    if (picked.size > 10 * 1024 * 1024) {
+      setErrorMsg('File too large. Please choose an image under 10 MB.');
+      return;
+    }
+
+    setErrorMsg('');
+    setUploadState('idle');
+    setFile(picked);
+
+    const reader = new FileReader();
+    reader.onload = () => setPreview(reader.result as string);
+    reader.readAsDataURL(picked);
+  }
+
+  function clearFile() {
+    setFile(null);
+    setPreview(null);
+    setUploadState('idle');
+    setErrorMsg('');
+    if (inputRef.current) inputRef.current.value = '';
+  }
+
+  async function handleUpload() {
+    if (!file) return;
+    setUploadState('uploading');
+    setErrorMsg('');
+
+    try {
+      // 1. Upload image to Cloudinary — get back a permanent URL
+      const proofUrl = await uploadProofToCloudinary(file);
+
+      // 2. Save the Cloudinary URL on the order
+      const res = await fetch(`/api/orders/${orderId}/proof`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ proofUrl }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        setErrorMsg(json.error ?? 'Upload failed. Please try again.');
+        setUploadState('error');
+        return;
+      }
+
+      setUploadState('success');
+    } catch {
+      setErrorMsg('Upload failed. Please check your connection and try again.');
+      setUploadState('error');
+    }
+  }
+
+  if (uploadState === 'success') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center gap-3 py-5"
+      >
+        <div className="flex items-center justify-center w-12 h-12 rounded-full" style={{ background: 'oklch(0.22 0.05 145)' }}>
+          <Check size={22} strokeWidth={2.2} style={{ color: 'oklch(0.72 0.17 145)' }} />
+        </div>
+        <p className="text-[0.65rem] tracking-[0.08em] font-semibold text-foreground">
+          Proof uploaded successfully
+        </p>
+        <p className="text-[0.58rem] tracking-[0.04em] text-muted-foreground text-center leading-relaxed max-w-[220px]">
+          We&apos;ll review your payment and confirm your order shortly.
+        </p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 pt-1">
+      <p className="text-[0.62rem] tracking-[0.16em] uppercase font-semibold text-foreground">
+        Upload Proof of Payment
+      </p>
+      <p className="text-[0.60rem] leading-relaxed tracking-[0.03em] text-muted-foreground">
+        Take a screenshot or photo of your transfer receipt and upload it below. We&apos;ll verify and confirm your order.
+      </p>
+
+      <AnimatePresence mode="wait">
+        {!preview ? (
+          <motion.button
+            key="dropzone"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => inputRef.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 py-7 border border-dashed border-border/60 hover:border-accent/50 transition-colors duration-200 cursor-pointer"
+          >
+            <Upload size={18} strokeWidth={1.6} className="text-muted-foreground/50" />
+            <span className="text-[0.58rem] tracking-[0.10em] uppercase text-muted-foreground/60">
+              Tap to select image
+            </span>
+            <span className="text-[0.50rem] tracking-[0.06em] text-muted-foreground/35">
+              JPG, PNG, WEBP · Max 4 MB
+            </span>
+          </motion.button>
+        ) : (
+          <motion.div
+            key="preview"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="relative"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview}
+              alt="Proof preview"
+              className="w-full max-h-52 object-contain border border-border/50 bg-muted/10"
+            />
+            <button
+              onClick={clearFile}
+              className="absolute top-2 right-2 flex items-center justify-center w-6 h-6 bg-background/80 border border-border/60 transition-colors hover:bg-background"
+              aria-label="Remove"
+            >
+              <X size={12} strokeWidth={2} className="text-muted-foreground" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {errorMsg && (
+        <p className="text-[0.56rem] tracking-[0.04em] leading-relaxed" style={{ color: 'oklch(0.65 0.20 25)' }}>
+          {errorMsg}
+        </p>
+      )}
+
+      {preview && (
+        <button
+          onClick={handleUpload}
+          disabled={uploadState === 'uploading'}
+          className="w-full flex items-center justify-center gap-2 h-11 text-[0.60rem] tracking-[0.18em] uppercase font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ background: GOLD_GRADIENT, color: 'oklch(0.12 0 0)' }}
+        >
+          {uploadState === 'uploading' ? (
+            <>
+              <Loader2 size={13} strokeWidth={2} className="animate-spin" />
+              Uploading…
+            </>
+          ) : (
+            <>
+              <Upload size={13} strokeWidth={2} />
+              Submit Proof of Payment
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Bank transfer instructions ──────────────────────────────────────────────────
 
-function BankTransferInstructions({ total }: { total?: number }) {
+function BankTransferInstructions({ total, orderId }: { total?: number; orderId: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.9, duration: 0.4 }}
-      className="border border-border bg-background/60 p-5 space-y-3"
+      className="border border-border bg-background/60 p-5 space-y-4"
     >
       <div className="flex items-center gap-2">
         <Clock size={14} strokeWidth={1.8} className="text-accent" />
@@ -111,18 +317,9 @@ function BankTransferInstructions({ total }: { total?: number }) {
         ) : (
           'the exact amount'
         )}{' '}
-        to the account below and send proof of payment to our{' '}
-        <a
-          href="https://wa.me/2348164763362"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
-        >
-          WhatsApp
-        </a>
-        .
+        to the account below, then upload your proof of payment here.
       </p>
-      <div className="space-y-2 pt-1">
+      <div className="space-y-2">
         {[
           { label: 'Bank', value: 'Moniepoint' },
           { label: 'Account Number', value: '7014006235' },
@@ -143,6 +340,10 @@ function BankTransferInstructions({ total }: { total?: number }) {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="pt-1 border-t border-border/40">
+        <ProofUploader orderId={orderId} />
       </div>
     </motion.div>
   );
@@ -357,7 +558,7 @@ function OrderConfirmationInner() {
       {!loading && order && <OrderItemsSummary order={order} />}
 
       {/* ── Bank transfer instructions ── */}
-      {isBankTransfer && <BankTransferInstructions total={orderTotal} />}
+      {isBankTransfer && <BankTransferInstructions total={orderTotal} orderId={lookupKey ?? ''} />}
 
       {/* ── What happens next (Paystack) ── */}
       {!isBankTransfer && (
