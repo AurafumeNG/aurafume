@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { requireAdmin } from '@/lib/admin-auth';
 import AdminSecuritySettings, { getSecuritySettings } from '@/models/AdminSecuritySettings';
 import { logSecurityEvent } from '@/models/SecurityLog';
+import type { IAdminSecuritySettings } from '@/models/AdminSecuritySettings';
 import type { ApiResponse } from '@/types/auth';
 
 // ── GET /api/admin/security/settings ─────────────────────────────────────────
@@ -14,7 +15,7 @@ export async function GET() {
   try {
     await connectDB();
     const settings = await getSecuritySettings();
-    return NextResponse.json<ApiResponse>({ success: true, data: settings });
+    return NextResponse.json<ApiResponse<IAdminSecuritySettings>>({ success: true, data: settings });
   } catch (err) {
     console.error('[api/admin/security/settings GET]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
@@ -69,7 +70,7 @@ export async function PATCH(req: NextRequest) {
       adminName:   admin.email,
     });
 
-    return NextResponse.json<ApiResponse>({ success: true, data: updated });
+    return NextResponse.json<ApiResponse<IAdminSecuritySettings>>({ success: true, data: updated });
   } catch (err) {
     console.error('[api/admin/security/settings PATCH]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
