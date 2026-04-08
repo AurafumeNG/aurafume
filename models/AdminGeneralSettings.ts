@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 
 export const SINGLETON_ID = 'admin_general_settings';
 
-export interface IAdminGeneralSettings extends Document {
+export interface IAdminGeneralSettings extends Document<string> {
   _id:           string;
   storeName:     string;
   storeTagline:  string;
