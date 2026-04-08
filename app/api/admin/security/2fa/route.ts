@@ -16,7 +16,7 @@ export async function GET() {
     const user = await User.findById(admin.userId).select('+twoFaBackupCodes');
     if (!user) return NextResponse.json<ApiResponse>({ error: 'User not found.' }, { status: 404 });
 
-    return NextResponse.json<ApiResponse>({
+    return NextResponse.json<ApiResponse<{ enabled: boolean; hasBackupCodes: boolean }>>({
       success: true,
       data: {
         enabled:         user.twoFaEnabled ?? false,
