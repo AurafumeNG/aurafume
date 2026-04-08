@@ -16,7 +16,7 @@ export async function GET() {
   try {
     await connectDB();
     const user = await User.findById(admin.userId).select('+adminPin');
-    return NextResponse.json<ApiResponse>({ success: true, data: { pinSet: !!user?.adminPin } });
+    return NextResponse.json<ApiResponse<{ pinSet: boolean }>>({ success: true, data: { pinSet: !!user?.adminPin } });
   } catch (err) {
     console.error('[api/admin/security/pin GET]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
