@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       SecurityLog.countDocuments(filter),
     ]);
 
-    return NextResponse.json<ApiResponse>({
+    return NextResponse.json<ApiResponse<{ logs: typeof logs; total: number; page: number; pages: number }>>({
       success: true,
       data: {
         logs,
