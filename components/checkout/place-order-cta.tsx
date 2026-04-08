@@ -124,9 +124,11 @@ export default function PlaceOrderCta() {
   }, [paymentMethod?.id]);
 
   // ── Derived totals ────────────────────────────────────────────────────────────
-  const discount   = appliedCoupon?.discountAmount ?? 0;
-  const wrapFee    = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
-  const finalTotal = cartTotal - discount + deliveryFee + wrapFee;
+  const isFreeShipping = appliedCoupon?.type === 'free-shipping';
+  const discount       = isFreeShipping ? deliveryFee : (appliedCoupon?.discountAmount ?? 0);
+  const effectiveDelivery = isFreeShipping ? 0 : deliveryFee;
+  const wrapFee        = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
+  const finalTotal     = cartTotal - discount + effectiveDelivery + wrapFee;
 
   // ── Readiness ─────────────────────────────────────────────────────────────────
   const isReady =

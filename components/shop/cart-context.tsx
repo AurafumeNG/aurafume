@@ -44,7 +44,8 @@ export type CartItemInput = Omit<CartItem, 'qty'> & { qty?: number };
 export interface AppliedCoupon {
   code: string;
   label: string;           // e.g. "10% off"
-  discountAmount: number;  // computed flat amount off cartTotal
+  discountAmount: number;  // computed flat amount off cartTotal (0 for free-shipping)
+  type: string;            // 'pct' | 'flat' | 'free-shipping' | 'buy-x-get-y'
 }
 
 export interface GiftOptions {
@@ -197,24 +198,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const applyCoupon = useCallback(async (code: string) => {
     setCouponStatus('loading');
-
-    // Snapshot current cart total to send to API
-    let currentTotal = 0;
-    setItems(current => {
-      currentTotal = current.reduce((s, i) => s + i.pricePerUnit * i.qty, 0);
-      return current;
-    });
-
     try {
       const res  = await fetch('/api/coupons/validate', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ code: code.trim(), cartTotal: currentTotal }),
+        body:    JSON.stringify({ code: code.trim(), cartTotal }),
       });
       const data = await res.json() as {
         valid:     boolean;
         code?:     string;
         label?:    string;
+        type?:     string;
         discount?: number;
         reason?:   string;
       };
@@ -229,13 +223,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         code:           data.code!,
         label:          data.label!,
         discountAmount: data.discount!,
+        type:           data.type!,
       });
       setCouponStatus('success');
     } catch {
       setCouponStatus('error');
       setAppliedCoupon(null);
     }
-  }, []);
+  }, [cartTotal]);
 
   const removeCoupon = useCallback(() => {
     setAppliedCoupon(null);

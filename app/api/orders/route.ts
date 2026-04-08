@@ -55,9 +55,16 @@ export async function POST(req: NextRequest) {
         const tooSmall  = cartTotal < coupon.minOrderAmount;
 
         if (!expired && !exhausted && !tooSmall) {
-          discount = coupon.type === 'pct'
-            ? Math.round(cartTotal * coupon.value / 100)
-            : Math.min(coupon.value, cartTotal);
+          if (coupon.type === 'pct') {
+            const raw = Math.round(cartTotal * coupon.value / 100);
+            discount  = coupon.hasPctCap && coupon.pctCap > 0
+              ? Math.min(raw, coupon.pctCap)
+              : raw;
+          } else if (coupon.type === 'flat') {
+            discount = Math.min(coupon.value, cartTotal);
+          } else if (coupon.type === 'free-shipping') {
+            discount = deliveryFee; // makes effective delivery fee = 0
+          }
           couponLabel = coupon.label;
 
           // Increment usage count atomically

@@ -12,11 +12,13 @@ import { useCheckout } from './checkout-context';
 
 function useTotals() {
   const { cartTotal, appliedCoupon, giftOptions } = useCart();
-  const { deliveryFee } = useCheckout();
+  const { deliveryFee: rawDeliveryFee } = useCheckout();
 
-  const discount  = appliedCoupon?.discountAmount ?? 0;
-  const wrapFee   = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
-  const total     = cartTotal - discount + deliveryFee + wrapFee;
+  const isFreeShipping = appliedCoupon?.type === 'free-shipping';
+  const discount       = isFreeShipping ? rawDeliveryFee : (appliedCoupon?.discountAmount ?? 0);
+  const deliveryFee    = isFreeShipping ? 0 : rawDeliveryFee;
+  const wrapFee        = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
+  const total          = cartTotal - discount + deliveryFee + wrapFee;
 
   return { cartTotal, discount, deliveryFee, wrapFee, total, appliedCoupon, giftOptions };
 }

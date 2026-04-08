@@ -45,7 +45,14 @@ export interface IUser extends Document {
   verificationTokenExpiry?: Date;
   resetPasswordToken?: string;
   resetPasswordTokenExpiry?: Date;
-  role: 'customer' | 'admin' | 'superadmin';
+  inviteToken?: string;
+  inviteTokenExpires?: Date;
+  lastLoginAt?: Date;
+  adminPin?: string;        // bcrypt-hashed 6-digit PIN
+  twoFaEnabled?: boolean;
+  twoFaSecret?: string;     // TOTP secret (store encrypted in production)
+  twoFaBackupCodes?: string[]; // hashed backup codes
+  role: 'customer' | 'admin' | 'superadmin' | 'viewer';
   wishlist: string[];
   addresses: IAddress[];
   avatar?: string;
@@ -133,9 +140,16 @@ const UserSchema = new Schema<IUser>(
     verificationTokenExpiry: { type: Date },
     resetPasswordToken: { type: String },
     resetPasswordTokenExpiry: { type: Date },
+    inviteToken: { type: String },
+    inviteTokenExpires: { type: Date },
+    lastLoginAt: { type: Date },
+    adminPin:          { type: String, select: false },
+    twoFaEnabled:      { type: Boolean, default: false },
+    twoFaSecret:       { type: String, select: false },
+    twoFaBackupCodes:  [{ type: String, select: false }],
     role: {
       type: String,
-      enum: ['customer', 'admin', 'superadmin'],
+      enum: ['customer', 'admin', 'superadmin', 'viewer'],
       default: 'customer',
     },
     wishlist: [{ type: String }],

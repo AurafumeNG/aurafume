@@ -69,7 +69,10 @@ export async function POST(req: NextRequest) {
     // ── Successful login ─────────────────────────────────────────────────────
     resetAttempts(ip);
 
-    const token = signToken({ userId: user._id.toString(), email: user.email, role: 'admin' });
+    // Track last login time (fire-and-forget; never block the login response)
+    User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() }).catch(() => {});
+
+    const token = signToken({ userId: user._id.toString(), email: user.email, role: user.role });
 
     const res = NextResponse.json<ApiResponse<{ firstName: string; email: string }>>({
       success: true,

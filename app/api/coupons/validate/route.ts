@@ -44,9 +44,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Compute discount
-    const discount = coupon.type === 'pct'
-      ? Math.round(cartTotal * coupon.value / 100)
-      : Math.min(coupon.value, cartTotal);
+    let discount = 0;
+    if (coupon.type === 'pct') {
+      const raw = Math.round(cartTotal * (coupon.value as number) / 100);
+      discount = (coupon.hasPctCap && (coupon.pctCap as number) > 0)
+        ? Math.min(raw, coupon.pctCap as number)
+        : raw;
+    } else if (coupon.type === 'flat') {
+      discount = Math.min(coupon.value as number, cartTotal);
+    }
+    // 'free-shipping': discount = 0 here; delivery fee is zeroed at checkout
+    // 'buy-x-get-y': not yet implemented
 
     return NextResponse.json({
       valid:    true,

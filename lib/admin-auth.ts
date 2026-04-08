@@ -13,7 +13,11 @@ export async function requireAdmin(): Promise<TokenPayload | null> {
 
   const payload = verifyToken(token);
   if (!payload) return null;
-  if (payload.role !== 'admin' && payload.role !== 'superadmin') return null;
+  if (
+    payload.role !== 'admin' &&
+    payload.role !== 'superadmin' &&
+    payload.role !== 'viewer'
+  ) return null;
 
   return payload;
 }

@@ -128,6 +128,7 @@ export default function OrderSummary() {
 
   if (items.length === 0) return null;
 
+  const isFreeShipping = appliedCoupon?.type === 'free-shipping';
   const discountAmount = appliedCoupon?.discountAmount ?? 0;
   const wrapFee        = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
   const deliveryFee    = cartTotal >= FREE_DELIVERY_THRESHOLD ? 0 : null; // null = not yet known
@@ -154,7 +155,7 @@ export default function OrderSummary() {
 
         {/* Discount */}
         <AnimatePresence>
-          {appliedCoupon && (
+          {appliedCoupon && !isFreeShipping && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -194,15 +195,18 @@ export default function OrderSummary() {
         <Line
           label="Delivery"
           value={
-            deliveryFee === 0
+            isFreeShipping || deliveryFee === 0
               ? 'Free'
               : 'Calculated at checkout'
           }
           sub={
-            deliveryFee !== 0
-              ? `Free over ₦${FREE_DELIVERY_THRESHOLD.toLocaleString()}`
-              : undefined
+            isFreeShipping
+              ? `${appliedCoupon!.code} applied`
+              : deliveryFee !== 0
+                ? `Free over ₦${FREE_DELIVERY_THRESHOLD.toLocaleString()}`
+                : undefined
           }
+          accent={isFreeShipping}
         />
 
         {/* Divider */}

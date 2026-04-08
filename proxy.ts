@@ -4,7 +4,11 @@ import { verifyToken } from '@/lib/jwt';
 
 const ADMIN_COOKIE     = 'aura-admin-auth';
 const ADMIN_LOGIN_PATH = '/admin/login';
+const ADMIN_SETUP_PATH = '/admin/setup';
 const ADMIN_ROOT       = '/admin';
+
+// Routes under /admin that don't require an active session
+const PUBLIC_ADMIN_PATHS = [ADMIN_LOGIN_PATH, ADMIN_SETUP_PATH];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -22,7 +26,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // Protected admin route — require valid admin session
-  if (!isAdmin && pathname !== ADMIN_LOGIN_PATH) {
+  if (!isAdmin && !PUBLIC_ADMIN_PATHS.includes(pathname)) {
     const url = new URL(ADMIN_LOGIN_PATH, req.url);
     if (pathname !== ADMIN_ROOT) url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);

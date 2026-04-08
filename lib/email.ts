@@ -72,6 +72,35 @@ export async function sendVerificationEmail(email: string, token: string, firstN
   });
 }
 
+export async function sendAdminInviteEmail(
+  email:       string,
+  firstName:   string,
+  inviterName: string,
+  setupUrl:    string,
+  role:        string,
+  message?:    string,
+) {
+  const roleLabel =
+    role === 'superadmin' ? 'Super Admin'
+    : role === 'viewer'   ? 'Viewer'
+    : 'Admin';
+
+  await transporter.sendMail({
+    from:    FROM,
+    to:      email,
+    subject: `You've been invited to join the AuraFumeNG admin team`,
+    html: shell(`
+      <h1 style="margin:0 0 6px;font-size:20px;font-weight:300;letter-spacing:0.18em;text-transform:uppercase;color:#f0f0f0;">Admin Invitation</h1>
+      <p style="margin:0 0 32px;font-size:12px;color:#666;letter-spacing:0.06em;">Hi ${firstName},</p>
+      ${bodyText(`<strong style="color:#c5a76d;">${inviterName}</strong> has invited you to join the <strong style="color:#e0e0e0;">AuraFumeNG</strong> admin team as a <strong style="color:#c5a76d;">${roleLabel}</strong>.`)}
+      ${message ? bodyText(`<em style="color:#888;">"${message}"</em>`) : ''}
+      ${bodyText('Click the button below to set up your password and complete your account. This invitation expires in <strong style="color:#888;">48 hours</strong>.')}
+      ${CTAButton(setupUrl, 'Accept Invitation')}
+      ${smallText('If you weren\'t expecting this invitation, you can safely ignore this email. The link will expire automatically.')}
+    `),
+  });
+}
+
 export async function sendPasswordResetEmail(email: string, token: string, firstName: string) {
   const url = `${BASE_URL}/reset-password?token=${token}`;
 

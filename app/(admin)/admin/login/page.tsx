@@ -82,7 +82,7 @@ function AdminLoginInner() {
   const emailId    = useId();
   const passwordId = useId();
 
-  const [email,       setEmail]       = useState('');
+  const [email,       setEmail]       = useState(params.get('email') ?? '');
   const [password,    setPassword]    = useState('');
   const [showPw,      setShowPw]      = useState(false);
   const [errors,      setErrors]      = useState<{ email?: string; password?: string }>({});
