@@ -10,7 +10,7 @@ interface PaymentMethod {
   icon:        'paystack' | 'bank';
 }
 
-export interface IAdminPaymentSettings extends Document {
+export interface IAdminPaymentSettings extends Document<string> {
   _id: string;
   bankTransfer: {
     enabled:                   boolean;
