@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
     req.headers.get('x-real-ip') ??
     'Unknown';
 
-  return NextResponse.json<ApiResponse>({
+  type SessionData = {
+    sessions: { id: string; isCurrent: boolean; userAgent: string; ip: string; issuedAt: string | null; lastActive: string }[];
+  };
+  return NextResponse.json<ApiResponse<SessionData>>({
     success: true,
     data: {
       sessions: [
