@@ -16,7 +16,7 @@ export interface ResetPasswordRequestBody {
   password: string;
 }
 
-export interface ApiResponse<T = null> {
+export interface ApiResponse<T = unknown> {
   success?: boolean;
   error?: string;
   message?: string;

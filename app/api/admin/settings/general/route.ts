@@ -4,6 +4,7 @@ import path from 'path';
 import connectDB from '@/lib/mongodb';
 import { requireAdmin } from '@/lib/admin-auth';
 import AdminGeneralSettings, { getGeneralSettings } from '@/models/AdminGeneralSettings';
+import type { IAdminGeneralSettings } from '@/models/AdminGeneralSettings';
 import { logAdminAction } from '@/models/AdminActivityLog';
 import type { ApiResponse } from '@/types/auth';
 
@@ -16,7 +17,7 @@ export async function GET() {
   try {
     await connectDB();
     const settings = await getGeneralSettings();
-    return NextResponse.json<ApiResponse>({ success: true, data: settings });
+    return NextResponse.json<ApiResponse<IAdminGeneralSettings>>({ success: true, data: settings });
   } catch (err) {
     console.error('[api/admin/settings/general GET]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
@@ -107,7 +108,7 @@ export async function PATCH(req: NextRequest) {
       targetId:   'admin_general_settings',
     });
 
-    return NextResponse.json<ApiResponse>({ success: true, data: updated });
+    return NextResponse.json<ApiResponse<IAdminGeneralSettings>>({ success: true, data: updated });
   } catch (err) {
     console.error('[api/admin/settings/general PATCH]', err);
     return NextResponse.json<ApiResponse>({ error: 'Server error.' }, { status: 500 });
