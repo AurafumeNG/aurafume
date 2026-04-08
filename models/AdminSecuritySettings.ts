@@ -5,8 +5,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 
 export const SINGLETON_ID = 'admin_security_settings';
 
-export interface IAdminSecuritySettings extends Document {
-  _id: string;
+export interface IAdminSecuritySettings extends Document<string> {
   // Password Policy
   minPasswordLength:  number;
   requireUppercase:   boolean;

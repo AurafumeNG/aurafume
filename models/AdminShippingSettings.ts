@@ -29,8 +29,7 @@ interface PickupMethod {
 
 type ShippingMethod = DeliveryMethod | PickupMethod;
 
-export interface IAdminShippingSettings extends Document {
-  _id:     string;
+export interface IAdminShippingSettings extends Document<string> {
   methods: ShippingMethod[];
   updatedAt: Date;
 }

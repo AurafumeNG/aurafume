@@ -11,7 +11,6 @@ interface PaymentMethod {
 }
 
 export interface IAdminPaymentSettings extends Document<string> {
-  _id: string;
   bankTransfer: {
     enabled:                   boolean;
     bankName:                  string;

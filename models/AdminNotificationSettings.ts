@@ -15,7 +15,6 @@ interface SimpleEvent {
 }
 
 export interface IAdminNotificationSettings extends Document<string> {
-  _id: string;
   orderAlerts: {
     newOrder:            OrderEvent;
     paymentConfirmed:    OrderEvent;
