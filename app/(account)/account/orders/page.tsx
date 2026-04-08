@@ -30,148 +30,55 @@ const FILTERS: OrderFilter[] = [
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
-// ── Mock orders (replace with real API fetch) ───────────────────────────────────
+// ── API response type ───────────────────────────────────────────────────────────
 
-const ADDR_DEFAULT: import('@/components/account/orders-list').OrderAddress = {
-  name: 'Promise Udo',
-  phone: '+234 816 476 3362',
-  street: '14 Admiralty Way',
-  apt: 'Flat 3B',
-  city: 'Lekki',
-  state: 'Lagos',
-  country: 'Nigeria',
-};
+interface ApiOrder {
+  _id: string;
+  orderNumber: string;
+  createdAt: string;
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  contact: { firstName: string; lastName: string; phone: string; email: string };
+  shippingAddress: { street: string; apt?: string; city: string; state: string; country: string };
+  items: { productId: string; name: string; image: string; size: string; qty: number; pricePerUnit: number }[];
+  pricing: { subtotal: number; deliveryFee: number; discount: number; total: number; couponCode?: string };
+  payment: { method: 'paystack' | 'bank-transfer'; paystackRef?: string };
+  delivery: { notes?: string };
+}
 
-const MOCK_ORDERS: Order[] = [
-  {
-    id: '1',
-    orderNumber: 'ORD-2024-00183',
-    date: new Date('2024-11-20'),
-    status: 'delivered',
-    subtotal: 299000,
-    deliveryFee: 3000,
-    discount: 0,
-    total: 302000,
-    paymentMethod: 'paystack',
-    deliveryAddress: ADDR_DEFAULT,
-    items: [
-      {
-        productId: 'stronger-for-you-intense',
-        name: 'Stronger For You Intense',
-        image: '/images/image3.jpeg',
-        size: '100ml',
-        qty: 1,
-        price: 265000,
-      },
-      {
-        productId: 'oud-imperiale',
-        name: 'Oud Impériale',
-        image: '/images/image8.jpeg',
-        size: '50ml',
-        qty: 1,
-        price: 34000,
-      },
-    ],
-  },
-  {
-    id: '2',
-    orderNumber: 'ORD-2024-00201',
-    date: new Date('2024-12-03'),
-    status: 'shipped',
-    subtotal: 149500,
-    deliveryFee: 3000,
-    discount: 14950,
-    total: 137550,
-    trackingNumber: 'GIG-20241203-XY7',
-    couponCode: 'AURA10',
-    paymentMethod: 'paystack',
-    deliveryAddress: ADDR_DEFAULT,
-    items: [
-      {
-        productId: 'loving-you-frozen',
-        name: 'Loving You Frozen',
-        image: '/images/image5.jpeg',
-        size: '50ml',
-        qty: 1,
-        price: 149500,
-      },
-    ],
-  },
-  {
-    id: '3',
-    orderNumber: 'ORD-2025-00012',
-    date: new Date('2025-01-08'),
-    status: 'processing',
-    subtotal: 268000,
-    deliveryFee: 5500,
-    discount: 0,
-    total: 273500,
-    paymentMethod: 'bank-transfer',
-    deliveryAddress: ADDR_DEFAULT,
-    items: [
-      {
-        productId: 'aurore-blanche',
-        name: 'Aurore Blanche',
-        image: '/images/image7.jpeg',
-        size: '50ml',
-        qty: 1,
-        price: 134000,
-      },
-      {
-        productId: 'rose-oud',
-        name: 'Rose Oud',
-        image: '/images/image4.jpeg',
-        size: '30ml',
-        qty: 2,
-        price: 67000,
-      },
-    ],
-  },
-  {
-    id: '4',
-    orderNumber: 'ORD-2025-00031',
-    date: new Date('2025-01-22'),
-    status: 'pending',
-    subtotal: 89500,
-    deliveryFee: 3000,
-    discount: 0,
-    total: 92500,
-    paymentMethod: 'paystack',
-    deliveryAddress: ADDR_DEFAULT,
-    items: [
-      {
-        productId: 'loving-you-frozen-30ml',
-        name: 'Loving You Frozen',
-        image: '/images/image5.jpeg',
-        size: '30ml',
-        qty: 1,
-        price: 89500,
-      },
-    ],
-  },
-  {
-    id: '5',
-    orderNumber: 'ORD-2024-00157',
-    date: new Date('2024-10-14'),
-    status: 'cancelled',
-    subtotal: 175000,
-    deliveryFee: 5500,
-    discount: 0,
-    total: 180500,
-    paymentMethod: 'paystack',
-    deliveryAddress: ADDR_DEFAULT,
-    items: [
-      {
-        productId: 'stronger-for-you-absolute',
-        name: 'Stronger For You Absolute',
-        image: '/images/image11.jpeg',
-        size: '50ml',
-        qty: 1,
-        price: 175000,
-      },
-    ],
-  },
-];
+function mapApiOrder(o: ApiOrder): Order {
+  // 'confirmed' is not in the component's OrderStatus union — treat it as 'processing'
+  const status: OrderStatus = o.status === 'confirmed' ? 'processing' : o.status;
+
+  return {
+    id: o._id,
+    orderNumber: o.orderNumber,
+    date: new Date(o.createdAt),
+    status,
+    subtotal: o.pricing.subtotal,
+    deliveryFee: o.pricing.deliveryFee,
+    discount: o.pricing.discount,
+    total: o.pricing.total,
+    couponCode: o.pricing.couponCode,
+    paymentMethod: o.payment.method,
+    deliveryAddress: {
+      name: `${o.contact.firstName} ${o.contact.lastName}`.trim(),
+      phone: o.contact.phone,
+      street: o.shippingAddress.street,
+      apt: o.shippingAddress.apt,
+      city: o.shippingAddress.city,
+      state: o.shippingAddress.state,
+      country: o.shippingAddress.country,
+    },
+    items: o.items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      image: item.image,
+      size: item.size,
+      qty: item.qty,
+      price: item.pricePerUnit,
+    })),
+  };
+}
 
 // ── Orders header (nav + filter tabs) ──────────────────────────────────────────
 
@@ -244,7 +151,7 @@ function OrdersHeader({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.15 }}
         ref={tabsRef}
-        className="flex overflow-x-auto border-t border-border/40"
+        className="flex items-center justify-center overflow-x-auto border-t border-border/40"
         style={{ scrollbarWidth: 'none' }}
       >
         <div className="flex px-4 sm:px-6 min-w-max">
@@ -334,14 +241,34 @@ export default function OrdersPage() {
 
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   // Auth guard
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login?redirect=/account/orders');
   }, [isLoading, user, router]);
 
-  // Replace with real API data
-  const allOrders = MOCK_ORDERS;
+  // Fetch real orders
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    setOrdersLoading(true);
+    setOrdersError(null);
+
+    fetch('/api/orders')
+      .then((res) => res.json())
+      .then((json: { success?: boolean; data?: ApiOrder[]; error?: string }) => {
+        if (json.success && Array.isArray(json.data)) {
+          setAllOrders(json.data.map(mapApiOrder));
+        } else {
+          setOrdersError(json.error ?? 'Failed to load orders.');
+        }
+      })
+      .catch(() => setOrdersError('Failed to load orders.'))
+      .finally(() => setOrdersLoading(false));
+  }, [isLoading, user]);
 
   // Filter by tab
   const tabFiltered =
@@ -359,7 +286,7 @@ export default function OrdersPage() {
     cancelled: allOrders.filter((o) => o.status === 'cancelled').length,
   };
 
-  if (isLoading || !user) {
+  if (isLoading || !user || ordersLoading) {
     return (
       <>
         <OrdersHeader
@@ -371,6 +298,23 @@ export default function OrdersPage() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-32 bg-muted/40 animate-pulse" />
           ))}
+        </div>
+      </>
+    );
+  }
+
+  if (ordersError) {
+    return (
+      <>
+        <OrdersHeader
+          activeFilter={activeFilter}
+          onFilter={setActiveFilter}
+          counts={{}}
+        />
+        <div className="pt-25 max-w-xl mx-auto px-4 sm:px-6 py-10 text-center">
+          <p className="text-[0.6rem] tracking-widest text-muted-foreground/70">
+            {ordersError}
+          </p>
         </div>
       </>
     );

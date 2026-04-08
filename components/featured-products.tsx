@@ -1,11 +1,22 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ProductCard, type Product } from './product-card';
 
 export default function FeaturedProducts({ products = [] }: { products?: Product[] }) {
+  const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch('/api/wishlist')
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.data) setWishlistedIds(new Set(json.data as string[]));
+      })
+      .catch(() => {});
+  }, []);
   return (
     <section className="bg-background py-20 md:py-28">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
@@ -51,7 +62,7 @@ export default function FeaturedProducts({ products = [] }: { products?: Product
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.1 }}
               >
-                <ProductCard product={product} />
+                <ProductCard product={product} initialWishlisted={wishlistedIds.has(product.id)} />
               </motion.div>
             ))}
           </div>

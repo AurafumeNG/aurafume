@@ -35,59 +35,6 @@ interface WishlistItem {
   stock: StockStatus;
 }
 
-// ── Mock data (swap for real API) ─────────────────────────────────────────────
-const MOCK_WISHLIST: WishlistItem[] = [
-  {
-    id: '1',
-    slug: 'stronger-for-you-intense',
-    name: 'Stronger For You Intense',
-    scentFamily: 'Woody · Oriental',
-    price: 265000,
-    image: '/images/image3.jpeg',
-    size: '100ml',
-    stock: 'in-stock',
-  },
-  {
-    id: '2',
-    slug: 'loving-you-frozen',
-    name: 'Loving You Frozen',
-    scentFamily: 'Fresh · Aquatic',
-    price: 149500,
-    image: '/images/image5.jpeg',
-    size: '50ml',
-    stock: 'low-stock',
-  },
-  {
-    id: '3',
-    slug: 'oud-imperiale',
-    name: 'Oud Impériale',
-    scentFamily: 'Oud · Amber',
-    price: 34000,
-    image: '/images/image8.jpeg',
-    size: '50ml',
-    stock: 'out-of-stock',
-  },
-  {
-    id: '4',
-    slug: 'aurore-blanche',
-    name: 'Aurore Blanche',
-    scentFamily: 'Floral · Powdery',
-    price: 134000,
-    image: '/images/image7.jpeg',
-    size: '30ml',
-    stock: 'in-stock',
-  },
-  {
-    id: '5',
-    slug: 'rose-oud',
-    name: 'Rose Oud',
-    scentFamily: 'Floral · Oud',
-    price: 67000,
-    image: '/images/image4.jpeg',
-    size: '50ml',
-    stock: 'in-stock',
-  },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(ngn: number) {
@@ -487,15 +434,38 @@ export default function WishlistPage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
   const { addToCart } = useCart();
-  const [items, setItems] = useState<WishlistItem[]>(MOCK_WISHLIST);
+  const [items, setItems] = useState<WishlistItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !user)
       router.replace('/login?redirect=/account/wishlist');
   }, [isLoading, user, router]);
 
+  // Load wishlist products once authenticated
+  useEffect(() => {
+    if (!user) return;
+    setLoadingItems(true);
+    fetch('/api/wishlist/products')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setItems(json.data as WishlistItem[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingItems(false));
+  }, [user]);
+
   const removeItem = useCallback((id: string) => {
+    // Optimistic remove from UI
     setItems((prev) => prev.filter((i) => i.id !== id));
+    // Persist via API (toggle = remove since it's currently wishlisted)
+    fetch('/api/wishlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: id }),
+    }).catch(() => {});
   }, []);
 
   function handleAddAll() {
@@ -514,7 +484,7 @@ export default function WishlistPage() {
       );
   }
 
-  if (isLoading || !user) {
+  if (isLoading || !user || loadingItems) {
     return (
       <>
         <WishlistHeader count={0} />

@@ -35,16 +35,32 @@ const steps = [
       { value: 'everyday', label: 'Everyday wear', sub: 'Subtle & effortless' },
       { value: 'evening', label: 'Evening out', sub: 'Bold & memorable' },
       { value: 'work', label: 'The office', sub: 'Refined & professional' },
-      { value: 'special', label: 'Special occasions', sub: 'Unforgettable moments' },
+      {
+        value: 'special',
+        label: 'Special occasions',
+        sub: 'Unforgettable moments',
+      },
     ],
   },
   {
     id: 'style',
     question: 'How would you describe your personal style?',
     options: [
-      { value: 'classic', label: 'Timeless & classic', sub: 'Clean lines, understated' },
-      { value: 'bold', label: 'Bold & expressive', sub: 'Confident, unmistakable' },
-      { value: 'romantic', label: 'Romantic & soft', sub: 'Delicate, feminine' },
+      {
+        value: 'classic',
+        label: 'Timeless & classic',
+        sub: 'Clean lines, understated',
+      },
+      {
+        value: 'bold',
+        label: 'Bold & expressive',
+        sub: 'Confident, unmistakable',
+      },
+      {
+        value: 'romantic',
+        label: 'Romantic & soft',
+        sub: 'Delicate, feminine',
+      },
       { value: 'earthy', label: 'Natural & grounded', sub: 'Warm, organic' },
     ],
   },
@@ -62,84 +78,35 @@ const steps = [
     id: 'who',
     question: 'Who are you shopping for?',
     options: [
-      { value: 'myself-her', label: 'Myself — feminine', sub: 'For her energy' },
-      { value: 'myself-him', label: 'Myself — masculine', sub: 'For his presence' },
+      {
+        value: 'myself-her',
+        label: 'Myself — feminine',
+        sub: 'For her energy',
+      },
+      {
+        value: 'myself-him',
+        label: 'Myself — masculine',
+        sub: 'For his presence',
+      },
       { value: 'gift-her', label: 'Gift — for her', sub: "She'll love it" },
-      { value: 'gift-him', label: 'Gift — for him', sub: "He'll wear it always" },
+      {
+        value: 'gift-him',
+        label: 'Gift — for him',
+        sub: "He'll wear it always",
+      },
     ],
   },
 ];
 
-// ── Product recommendation map ──────────────────────────────────────
-const allProducts: ProductResult[] = [
-  {
-    id: 'loving-you-frozen',
-    name: 'Loving You Frozen',
-    notes: 'Floral · Musky · Amber',
-    price: 149500,
-    image: '/images/image5.jpeg',
-    href: '/shop/loving-you-frozen',
-    badge: 'Best Seller',
-  },
-  {
-    id: 'stronger-intense',
-    name: 'Stronger For You Intense',
-    notes: 'Woody · Spicy · Warm',
-    price: 175000,
-    image: '/images/image3.jpeg',
-    href: '/shop/stronger-for-you-intense',
-    badge: 'Best Seller',
-  },
-  {
-    id: 'stronger-absolute',
-    name: 'Stronger For You Absolute',
-    notes: 'Oriental · Resinous · Bold',
-    price: 185000,
-    image: '/images/image11.jpeg',
-    href: '/shop/stronger-for-you-absolute',
-    badge: 'New',
-  },
-  {
-    id: 'suger-edp',
-    name: 'Suger EDP',
-    notes: 'Fresh · Green · Earthy',
-    price: 139500,
-    image: '/images/image1.jpeg',
-    href: '/shop/suger-edp',
-    badge: 'Best Seller',
-  },
-  {
-    id: 'read-lux',
-    name: "Re'ad Lux",
-    notes: 'Citrus · Floral · Musk',
-    price: 195000,
-    image: '/images/image7.jpeg',
-    href: '/shop/read-lux',
-    badge: 'New',
-  },
-  {
-    id: 'al-oud',
-    name: 'Al Oud',
-    notes: 'Oud · Resinous · Smoky',
-    price: 210000,
-    image: '/images/image8.jpeg',
-    href: '/shop/al-oud',
-    badge: 'Best Seller',
-  },
-];
-
-function getRecommendations(answers: QuizAnswer[]): ProductResult[] {
-  const map: Record<string, string[]> = {
-    scent_floral: ['loving-you-frozen', 'read-lux'],
-    scent_woody: ['stronger-intense', 'suger-edp'],
-    scent_oriental: ['al-oud', 'stronger-absolute'],
-    scent_fresh: ['suger-edp', 'read-lux'],
-  };
-
-  const scentAnswer = answers.find((a) => a.step === 2);
-  const key = scentAnswer ? `scent_${scentAnswer.value}` : null;
-  const ids = key && map[key] ? map[key] : ['loving-you-frozen', 'stronger-intense'];
-  return ids.map((id) => allProducts.find((p) => p.id === id)!).filter(Boolean);
+async function fetchRecommendations(answers: QuizAnswer[]): Promise<ProductResult[]> {
+  const scent = answers.find((a) => a.step === 2)?.value ?? '';
+  const who   = answers.find((a) => a.step === 3)?.value ?? '';
+  const params = new URLSearchParams();
+  if (scent) params.set('scent', scent);
+  if (who)   params.set('who',   who);
+  const res  = await fetch(`/api/products/recommend?${params.toString()}`);
+  const json = await res.json() as { success?: boolean; data?: ProductResult[] };
+  return json.data ?? [];
 }
 
 // ── Storage helpers ─────────────────────────────────────────────────
@@ -193,7 +160,9 @@ function ResultCard({ product }: { product: ProductResult }) {
           {product.notes}
         </p>
         <div className="flex items-baseline justify-between gap-2">
-          <h4 className="font-heading text-base text-foreground leading-snug">{product.name}</h4>
+          <h4 className="font-heading text-base text-foreground leading-snug">
+            {product.name}
+          </h4>
           <span className="text-sm text-foreground/80 shrink-0">
             ₦{product.price.toLocaleString('en-NG')}
           </span>
@@ -204,18 +173,14 @@ function ResultCard({ product }: { product: ProductResult }) {
 }
 
 // ── Quiz Modal ──────────────────────────────────────────────────────
-function QuizModal({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+function QuizModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [completed, setCompleted] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [recommendations, setRecommendations] = useState<ProductResult[]>([]);
+  const [loadingResults, setLoadingResults] = useState(false);
 
   // Restore from sessionStorage on mount
   useEffect(() => {
@@ -224,6 +189,10 @@ function QuizModal({
       setAnswers(saved.answers);
       if (saved.completed) {
         setCompleted(true);
+        setLoadingResults(true);
+        fetchRecommendations(saved.answers)
+          .then(setRecommendations)
+          .finally(() => setLoadingResults(false));
       } else {
         setCurrentStep(saved.answers.length);
       }
@@ -237,32 +206,41 @@ function QuizModal({
     } else {
       document.body.style.overflow = '';
     }
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [open]);
 
-  const handleSelect = useCallback((value: string) => {
-    if (animating) return;
-    const newAnswer: QuizAnswer = { step: currentStep, value };
-    const newAnswers = [...answers, newAnswer];
+  const handleSelect = useCallback(
+    (value: string) => {
+      if (animating) return;
+      const newAnswer: QuizAnswer = { step: currentStep, value };
+      const newAnswers = [...answers, newAnswer];
 
-    setLeaving(true);
-    setTimeout(() => {
-      setAnswers(newAnswers);
+      setLeaving(true);
+      setTimeout(() => {
+        setAnswers(newAnswers);
 
-      if (currentStep + 1 >= steps.length) {
-        setCompleted(true);
-        saveState({ answers: newAnswers, completed: true });
-      } else {
-        setCurrentStep(currentStep + 1);
-        saveState({ answers: newAnswers, completed: false });
-      }
+        if (currentStep + 1 >= steps.length) {
+          setCompleted(true);
+          saveState({ answers: newAnswers, completed: true });
+          setLoadingResults(true);
+          fetchRecommendations(newAnswers)
+            .then(setRecommendations)
+            .finally(() => setLoadingResults(false));
+        } else {
+          setCurrentStep(currentStep + 1);
+          saveState({ answers: newAnswers, completed: false });
+        }
 
-      setLeaving(false);
-      setAnimating(false);
-    }, 250);
+        setLeaving(false);
+        setAnimating(false);
+      }, 250);
 
-    setAnimating(true);
-  }, [animating, answers, currentStep]);
+      setAnimating(true);
+    },
+    [animating, answers, currentStep],
+  );
 
   function handleBack() {
     if (currentStep === 0 || animating) return;
@@ -281,9 +259,9 @@ function QuizModal({
     setAnswers([]);
     setCurrentStep(0);
     setCompleted(false);
+    setRecommendations([]);
   }
 
-  const recommendations = completed ? getRecommendations(answers) : [];
   const progress = completed ? 100 : (currentStep / steps.length) * 100;
   const step = steps[currentStep];
 
@@ -300,7 +278,6 @@ function QuizModal({
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none">
         <div className="pointer-events-auto w-full sm:max-w-130 bg-background flex flex-col max-h-[92svh] sm:max-h-[88vh] overflow-hidden sm:rounded-sm shadow-2xl">
-
           {/* Progress bar */}
           <div className="h-0.5 bg-border shrink-0">
             <div
@@ -322,7 +299,9 @@ function QuizModal({
                 </button>
               )}
               <p className="font-heading text-sm text-foreground">
-                {completed ? 'Your Matches' : `Question ${currentStep + 1} of ${steps.length}`}
+                {completed
+                  ? 'Your Matches'
+                  : `Question ${currentStep + 1} of ${steps.length}`}
               </p>
             </div>
             <button
@@ -354,7 +333,9 @@ function QuizModal({
                         <p className="text-[0.88rem] text-foreground font-medium leading-snug group-hover:text-accent transition-colors">
                           {opt.label}
                         </p>
-                        <p className="text-[0.72rem] text-muted-foreground mt-0.5">{opt.sub}</p>
+                        <p className="text-[0.72rem] text-muted-foreground mt-0.5">
+                          {opt.sub}
+                        </p>
                       </div>
                       <ArrowRight
                         size={14}
@@ -372,11 +353,20 @@ function QuizModal({
                 <h3 className="font-heading text-[clamp(1.35rem,3vw,1.65rem)] text-foreground leading-tight mb-8">
                   Your signature scents
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {recommendations.map((p) => (
-                    <ResultCard key={p.id} product={p} />
-                  ))}
-                </div>
+                {loadingResults ? (
+                  <div className="flex justify-center py-12">
+                    <svg className="animate-spin w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {recommendations.map((p: ProductResult) => (
+                      <ResultCard key={p.id} product={p} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -402,7 +392,8 @@ function QuizModal({
               </>
             ) : (
               <p className="text-center text-[0.62rem] text-muted-foreground tracking-[0.15em] uppercase">
-                {steps.length - currentStep} question{steps.length - currentStep !== 1 ? 's' : ''} left
+                {steps.length - currentStep} question
+                {steps.length - currentStep !== 1 ? 's' : ''} left
               </p>
             )}
           </div>
@@ -428,7 +419,6 @@ export default function ScentFinder() {
   return (
     <>
       <section className="relative bg-primary overflow-hidden py-24 md:py-32">
-
         {/* Fine grid texture overlay */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.035]"
@@ -443,13 +433,13 @@ export default function ScentFinder() {
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse 70% 55% at 50% 50%, rgba(198,167,123,0.10) 0%, transparent 70%)',
+            background:
+              'radial-gradient(ellipse 70% 55% at 50% 50%, rgba(198,167,123,0.10) 0%, transparent 70%)',
           }}
         />
 
         {/* Content */}
         <div className="relative max-w-2xl mx-auto px-6 sm:px-10 text-center flex flex-col items-center">
-
           {/* Eyebrow */}
           <div className="flex items-center gap-4 mb-6">
             <span className="block h-px w-8 bg-accent shrink-0" />
@@ -461,13 +451,15 @@ export default function ScentFinder() {
 
           {/* Headline */}
           <h2 className="font-heading text-[clamp(2.2rem,5vw,3.8rem)] text-primary-foreground leading-[1.05] mb-5">
-            Find Your Signature<br />
+            Find Your Signature
+            <br />
             <em className="not-italic text-accent">Scent</em>
           </h2>
 
           {/* Descriptor */}
           <p className="text-primary-foreground/45 text-[0.9rem] leading-relaxed max-w-sm mb-9">
-            Answer four quick questions and we'll match you with the fragrances made for your story.
+            Answer four quick questions and we'll match you with the fragrances
+            made for your story.
           </p>
 
           {/* Scent pills */}
@@ -488,9 +480,11 @@ export default function ScentFinder() {
             className="group inline-flex items-center gap-3 bg-accent text-[#1a1208] px-8 py-4 text-[0.72rem] tracking-[0.25em] uppercase font-medium transition-all duration-300 hover:bg-accent/90 hover:gap-4"
           >
             {hasState ? 'Continue Quiz' : 'Start Quiz'}
-            <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+            <ArrowRight
+              size={13}
+              className="transition-transform duration-300 group-hover:translate-x-0.5"
+            />
           </button>
-
         </div>
       </section>
 

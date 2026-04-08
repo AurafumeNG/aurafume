@@ -6,13 +6,16 @@ import Link from 'next/link';
 import { ShoppingBag, Heart } from 'lucide-react';
 import QuickAddSheet from '@/components/shop/quick-add-sheet';
 
-async function toggleWishlist(productId: string): Promise<{ wishlisted: boolean } | null> {
+async function toggleWishlist(
+  productId: string,
+): Promise<{ wishlisted: boolean } | null | 'unauthenticated'> {
   try {
     const res = await fetch('/api/wishlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productId }),
     });
+    if (res.status === 401) return 'unauthenticated';
     if (!res.ok) return null;
     const json = await res.json();
     return json.data;
@@ -32,7 +35,13 @@ export interface Product {
   sizes: string[];
 }
 
-export function ProductCard({ product, initialWishlisted = false }: { product: Product; initialWishlisted?: boolean }) {
+export function ProductCard({
+  product,
+  initialWishlisted = false,
+}: {
+  product: Product;
+  initialWishlisted?: boolean;
+}) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [wishlisted, setWishlisted] = useState(initialWishlisted);
   const [wishlistPending, setWishlistPending] = useState(false);
@@ -51,10 +60,13 @@ export function ProductCard({ product, initialWishlisted = false }: { product: P
     e.preventDefault();
     if (wishlistPending) return;
     setWishlistPending(true);
-    setWishlisted(v => !v);
+    setWishlisted((v) => !v);
     const result = await toggleWishlist(product.id);
-    if (result === null) {
-      setWishlisted(v => !v); // revert on error
+    if (result === 'unauthenticated') {
+      setWishlisted((v) => !v); // revert
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+    } else if (result === null) {
+      setWishlisted((v) => !v); // revert on error
     } else {
       setWishlisted(result.wishlisted);
     }
@@ -65,7 +77,10 @@ export function ProductCard({ product, initialWishlisted = false }: { product: P
     <>
       <article className="group flex flex-col">
         {/* Image container */}
-        <Link href={product.href} className="relative block overflow-hidden bg-card aspect-3/4">
+        <Link
+          href={product.href}
+          className="relative block overflow-hidden bg-card aspect-3/4"
+        >
           <Image
             src={product.image}
             alt={product.name}
@@ -98,7 +113,10 @@ export function ProductCard({ product, initialWishlisted = false }: { product: P
           {/* Quick-add overlay — slides up on hover */}
           <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out">
             <button
-              onClick={e => { e.preventDefault(); setSheetOpen(true); }}
+              onClick={(e) => {
+                e.preventDefault();
+                setSheetOpen(true);
+              }}
               aria-label={`Quick add ${product.name} to cart`}
               className="w-full flex items-center justify-center gap-2.5 py-3.5 text-[0.68rem] tracking-[0.2em] uppercase font-medium transition-colors duration-200 bg-primary/95 text-primary-foreground hover:bg-accent hover:text-accent-foreground"
             >

@@ -5,11 +5,21 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Search, Heart, ShoppingCart, Menu, X,
-  User, Package, MapPin, ShieldCheck, LogOut, ChevronRight,
+  Search,
+  Heart,
+  ShoppingCart,
+  Menu,
+  X,
+  User,
+  Package,
+  MapPin,
+  ShieldCheck,
+  LogOut,
+  ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/auth/auth-context';
+import { useCart } from '@/components/shop/cart-context';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const GOLD_GRADIENT =
@@ -17,22 +27,30 @@ const GOLD_GRADIENT =
 const GOLD = 'oklch(0.72 0.10 74)';
 
 const NAV_LINKS = [
-  { href: '/',            label: 'Home'        },
-  { href: '/shop',        label: 'Shop'        },
-  { href: '/about',       label: 'About'       },
+  { href: '/', label: 'Home' },
+  { href: '/shop', label: 'Shop' },
+  { href: '/about', label: 'About' },
   { href: '/collections', label: 'Collections' },
 ];
 
 const ACCOUNT_LINKS = [
-  { icon: User,        label: 'My Account',     href: '/account'           },
-  { icon: Package,     label: 'My Orders',      href: '/account/orders'    },
-  { icon: Heart,       label: 'Wishlist',       href: '/account/wishlist'  },
-  { icon: MapPin,      label: 'Saved Addresses', href: '/account/addresses' },
-  { icon: ShieldCheck, label: 'Security',       href: '/account/security'  },
+  { icon: User, label: 'My Account', href: '/account' },
+  { icon: Package, label: 'My Orders', href: '/account/orders' },
+  { icon: Heart, label: 'Wishlist', href: '/account/wishlist' },
+  { icon: MapPin, label: 'Saved Addresses', href: '/account/addresses' },
+  { icon: ShieldCheck, label: 'Security', href: '/account/security' },
 ];
 
 // ── Mini avatar ───────────────────────────────────────────────────────────────
-function NavAvatar({ name, src, size = 7 }: { name: string; src?: string; size?: number }) {
+function NavAvatar({
+  name,
+  src,
+  size = 7,
+}: {
+  name: string;
+  src?: string;
+  size?: number;
+}) {
   const initial = name.charAt(0).toUpperCase();
   const dim = `w-${size} h-${size}`;
   return (
@@ -54,18 +72,24 @@ function NavAvatar({ name, src, size = 7 }: { name: string; src?: string; size?:
 
 // ── Desktop dropdown ──────────────────────────────────────────────────────────
 function UserDropdown({
-  name, email, avatar, onLogout,
+  name,
+  email,
+  avatar,
+  onLogout,
 }: {
-  name: string; email: string; avatar?: string; onLogout: () => void;
+  name: string;
+  email: string;
+  avatar?: string;
+  onLogout: () => void;
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97, y: -6 }}
-      animate={{ opacity: 1, scale: 1,    y: 0   }}
-      exit={  { opacity: 0, scale: 0.97, y: -6   }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: -6 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
       className="absolute right-0 top-[calc(100%+10px)] z-50 w-64 bg-background border border-border/60 shadow-xl"
-      onPointerDown={e => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {/* Profile header */}
       <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/50">
@@ -75,7 +99,11 @@ function UserDropdown({
         >
           {avatar ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt={name} className="w-full h-full object-cover" />
+            <img
+              src={avatar}
+              alt={name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             <span className="font-heading text-[0.75rem] font-light text-background/90 select-none">
               {name.charAt(0).toUpperCase()}
@@ -105,7 +133,8 @@ function UserDropdown({
               {label}
             </span>
             <ChevronRight
-              size={12} strokeWidth={1.5}
+              size={12}
+              strokeWidth={1.5}
               className="text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors"
             />
           </Link>
@@ -119,7 +148,9 @@ function UserDropdown({
           className="w-full flex items-center gap-3 px-4 py-2.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors duration-100"
         >
           <LogOut size={13} strokeWidth={1.7} />
-          <span className="text-[0.58rem] tracking-widest uppercase font-medium">Sign Out</span>
+          <span className="text-[0.58rem] tracking-widest uppercase font-medium">
+            Sign Out
+          </span>
         </button>
       </div>
     </motion.div>
@@ -128,13 +159,21 @@ function UserDropdown({
 
 // ── Logout confirmation sheet ─────────────────────────────────────────────────
 function LogoutSheet({
-  isOpen, onClose, onConfirm, loading,
+  isOpen,
+  onClose,
+  onConfirm,
+  loading,
 }: {
-  isOpen: boolean; onClose: () => void; onConfirm: () => void; loading: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
 }) {
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   return (
@@ -143,15 +182,24 @@ function LogoutSheet({
         <>
           <motion.div
             key="lo-backdrop"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
             className="fixed inset-0 z-70 bg-black/40 backdrop-blur-sm"
             onClick={onClose}
           />
           <motion.div
             key="lo-sheet"
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 360, damping: 34, mass: 0.85 }}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{
+              type: 'spring',
+              stiffness: 360,
+              damping: 34,
+              mass: 0.85,
+            }}
             className="fixed inset-x-0 bottom-0 z-80 bg-background rounded-t-2xl shadow-2xl sm:max-w-sm sm:mx-auto"
           >
             <div className="flex justify-center pt-3 pb-1">
@@ -192,31 +240,40 @@ function LogoutSheet({
 }
 
 // ── Main navbar ───────────────────────────────────────────────────────────────
-export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
-  const pathname                 = usePathname();
-  const router                   = useRouter();
-  const { user, logout }         = useAuth();
+export default function Navbar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const { cartCount } = useCart();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [logoutSheet,  setLogoutSheet]  = useState(false);
+  const [logoutSheet, setLogoutSheet] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close drawer when route changes
-  useEffect(() => { setDrawerOpen(false); }, [pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
 
   // Lock body scroll when drawer open
   useEffect(() => {
-    if (!drawerOpen) { document.body.style.overflow = ''; return; }
+    if (!drawerOpen) {
+      document.body.style.overflow = '';
+      return;
+    }
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [drawerOpen]);
 
   // Close dropdown on outside click
   useEffect(() => {
     if (!dropdownOpen) return;
     const close = (e: PointerEvent) => {
-      if (!dropdownRef.current?.contains(e.target as Node)) setDropdownOpen(false);
+      if (!dropdownRef.current?.contains(e.target as Node))
+        setDropdownOpen(false);
     };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
@@ -236,7 +293,6 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
     <>
       <header className="w-full bg-background/90 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-
           {/* Logo */}
           <Link href="/" className="shrink-0">
             <Image
@@ -267,7 +323,10 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
 
           {/* Icons */}
           <div className="flex items-center gap-4">
-            <button aria-label="Search" className="text-foreground/70 hover:text-accent transition-colors">
+            <button
+              aria-label="Search"
+              className="text-foreground/70 hover:text-accent transition-colors"
+            >
               <Search size={20} />
             </button>
 
@@ -298,7 +357,7 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
             {user ? (
               <div ref={dropdownRef} className="relative hidden md:block">
                 <button
-                  onClick={() => setDropdownOpen(v => !v)}
+                  onClick={() => setDropdownOpen((v) => !v)}
                   aria-label="My account"
                   aria-expanded={dropdownOpen}
                   className="flex items-center gap-1.5 group"
@@ -317,7 +376,10 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
                       name={fullName}
                       email={user.email}
                       avatar={user.avatar}
-                      onLogout={() => { setDropdownOpen(false); setLogoutSheet(true); }}
+                      onLogout={() => {
+                        setDropdownOpen(false);
+                        setLogoutSheet(true);
+                      }}
                     />
                   )}
                 </AnimatePresence>
@@ -347,7 +409,9 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
       {/* ── Mobile overlay ── */}
       <div
         className={`fixed inset-0 z-50 bg-foreground/20 backdrop-blur-sm md:hidden transition-opacity duration-300 ${
-          drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          drawerOpen
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setDrawerOpen(false)}
       />
@@ -378,7 +442,6 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
 
         {/* Scrollable drawer body */}
         <div className="flex-1 overflow-y-auto">
-
           {/* ── User profile block ── */}
           {user ? (
             <div className="px-6 py-5 border-b border-border">
@@ -389,7 +452,11 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
                 >
                   {user.avatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={user.avatar} alt={user.firstName} className="w-full h-full object-cover" />
+                    <img
+                      src={user.avatar}
+                      alt={user.firstName}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <span className="font-heading text-lg font-light text-background/90 select-none">
                       {user.firstName.charAt(0).toUpperCase()}
@@ -419,7 +486,11 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
                     <span className="flex-1 text-[0.6rem] tracking-widest uppercase font-medium text-foreground">
                       {label}
                     </span>
-                    <ChevronRight size={11} strokeWidth={1.5} className="text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
+                    <ChevronRight
+                      size={11}
+                      strokeWidth={1.5}
+                      className="text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors"
+                    />
                   </Link>
                 ))}
               </div>
@@ -456,7 +527,10 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
 
           {/* Bottom icon row */}
           <div className="px-6 mt-8 pt-6 border-t border-border flex items-center gap-6">
-            <button aria-label="Search" className="text-foreground/70 hover:text-accent transition-colors">
+            <button
+              aria-label="Search"
+              className="text-foreground/70 hover:text-accent transition-colors"
+            >
               <Search size={20} />
             </button>
             <Link
@@ -486,7 +560,10 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
           {user && (
             <div className="px-6 mt-4 pb-8">
               <button
-                onClick={() => { setDrawerOpen(false); setLogoutSheet(true); }}
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setLogoutSheet(true);
+                }}
                 className="w-full flex items-center justify-center gap-2.5 h-11 border border-rose-200/60 dark:border-rose-800/40 text-[0.58rem] tracking-[0.2em] uppercase text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors duration-200"
               >
                 <LogOut size={14} strokeWidth={1.7} />
@@ -494,7 +571,6 @@ export default function Navbar({ cartCount = 0 }: { cartCount?: number }) {
               </button>
             </div>
           )}
-
         </div>
       </div>
 

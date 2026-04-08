@@ -173,14 +173,16 @@ function LogoutSheet({
   onConfirm,
   loading,
 }: {
-  isOpen:    boolean;
-  onClose:   () => void;
+  isOpen: boolean;
+  onClose: () => void;
   onConfirm: () => void;
-  loading:   boolean;
+  loading: boolean;
 }) {
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   return (
@@ -204,7 +206,12 @@ function LogoutSheet({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 360, damping: 34, mass: 0.85 }}
+            transition={{
+              type: 'spring',
+              stiffness: 360,
+              damping: 34,
+              mass: 0.85,
+            }}
             className="fixed inset-x-0 bottom-0 z-50 bg-background rounded-t-2xl shadow-2xl sm:max-w-sm sm:mx-auto"
           >
             {/* Drag handle */}
@@ -267,7 +274,7 @@ function LogoutSheet({
 export default function AccountPage() {
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
-  const [logoutOpen,    setLogoutOpen]    = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
 
   // Redirect if not logged in
@@ -375,12 +382,12 @@ export default function AccountPage() {
               href="/account/addresses"
               description="Manage delivery addresses"
             />
-            <MenuRow
+            {/* <MenuRow
               icon={CreditCard}
               label="Payment Methods"
               href="/account/payment"
               description="Saved payment options"
-            />
+            /> */}
           </MenuSection>
 
           <MenuSection title="More">
