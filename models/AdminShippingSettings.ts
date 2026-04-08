@@ -39,8 +39,8 @@ export interface IAdminShippingSettings extends Document<string> {
 const AdminShippingSettingsSchema = new Schema<IAdminShippingSettings>(
   {
     _id:     { type: String, default: SINGLETON_ID },
-    methods: { type: Array, default: [] },
-  },
+    methods: { type: [Schema.Types.Mixed], default: [] },
+  } as any,
   { timestamps: true, _id: false },
 );
 
