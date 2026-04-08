@@ -14,7 +14,7 @@ interface SimpleEvent {
   enabled: boolean;
 }
 
-export interface IAdminNotificationSettings extends Document {
+export interface IAdminNotificationSettings extends Document<string> {
   _id: string;
   orderAlerts: {
     newOrder:            OrderEvent;
