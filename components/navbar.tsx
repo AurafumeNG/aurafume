@@ -16,10 +16,140 @@ import {
   ShieldCheck,
   LogOut,
   ChevronRight,
+  ArrowRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/auth/auth-context';
 import { useCart } from '@/components/shop/cart-context';
+
+// ── Search overlay ────────────────────────────────────────────────────────────
+function SearchOverlay({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [term, setTerm] = useState('');
+
+  // Focus input when overlay opens; reset term on close
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setTerm('');
+    }
+  }, [isOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
+  // Lock scroll while open
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const q = term.trim();
+    if (!q) return;
+    router.push(`/shop?q=${encodeURIComponent(q)}`);
+    onClose();
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="search-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-md"
+            onClick={onClose}
+          />
+
+          {/* Panel */}
+          <motion.div
+            key="search-panel"
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="fixed top-0 inset-x-0 z-[61] bg-background border-b border-border shadow-lg px-4 sm:px-6 lg:px-8 pt-5 pb-6"
+          >
+            {/* Close row */}
+            <div className="flex items-center justify-between mb-4 max-w-2xl mx-auto">
+              <span className="text-[0.55rem] tracking-[0.2em] uppercase text-muted-foreground/60 font-medium">
+                Search Fragrances
+              </span>
+              <button
+                onClick={onClose}
+                aria-label="Close search"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={18} strokeWidth={1.8} />
+              </button>
+            </div>
+
+            {/* Input */}
+            <form
+              onSubmit={handleSubmit}
+              className="relative max-w-2xl mx-auto flex items-center"
+            >
+              <Search
+                size={17}
+                strokeWidth={1.8}
+                className="absolute left-4 text-muted-foreground pointer-events-none z-10 shrink-0"
+              />
+              <input
+                ref={inputRef}
+                type="search"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                placeholder="Search by name, scent family…"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full h-12 pl-11 pr-14 bg-card border border-border text-foreground text-[0.9rem] placeholder:text-muted-foreground/50 outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all duration-200"
+              />
+              {/* Submit arrow */}
+              <button
+                type="submit"
+                aria-label="Go"
+                className="absolute right-3 flex items-center justify-center w-8 h-8 text-muted-foreground hover:text-accent transition-colors disabled:opacity-30"
+                disabled={!term.trim()}
+              >
+                <ArrowRight size={17} strokeWidth={1.8} />
+              </button>
+            </form>
+
+            {/* Hint */}
+            <p className="text-center text-[0.52rem] tracking-[0.12em] uppercase text-muted-foreground/40 mt-3">
+              Press <kbd className="font-mono">Enter</kbd> to search ·{' '}
+              <kbd className="font-mono">Esc</kbd> to close
+            </p>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const GOLD_GRADIENT =
@@ -248,6 +378,7 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [logoutSheet, setLogoutSheet] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -325,6 +456,7 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             <button
               aria-label="Search"
+              onClick={() => setSearchOpen(true)}
               className="text-foreground/70 hover:text-accent transition-colors"
             >
               <Search size={20} />
@@ -529,6 +661,10 @@ export default function Navbar() {
           <div className="px-6 mt-8 pt-6 border-t border-border flex items-center gap-6">
             <button
               aria-label="Search"
+              onClick={() => {
+                setDrawerOpen(false);
+                setSearchOpen(true);
+              }}
               className="text-foreground/70 hover:text-accent transition-colors"
             >
               <Search size={20} />
@@ -581,6 +717,9 @@ export default function Navbar() {
         onConfirm={handleLogout}
         loading={logoutLoading}
       />
+
+      {/* Search overlay */}
+      <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );
 }

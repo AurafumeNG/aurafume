@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import SearchBar      from '@/components/shop/search-bar';
 import FilterSortBar  from '@/components/shop/filter-sort-bar';
 import FilterDrawer   from '@/components/shop/filter-drawer';
@@ -34,7 +35,9 @@ function countActiveFilters(f: ShopFilters): number {
 
 // ── Page ─────────────────────────────────────────────────────────────
 export default function ShopPage() {
-  const [query,        setQuery]        = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [query,        setQuery]        = useState(() => searchParams.get('q') ?? '');
   const [filters,      setFilters]      = useState<ShopFilters>(DEFAULT_FILTERS);
   const [sortBy,       setSortBy]       = useState<SortOption>('newest');
   const [viewMode,     setViewMode]     = useState<ViewMode>('grid');
@@ -71,6 +74,23 @@ export default function ShopPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Keep URL in sync with the search query (debounced)
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (query.trim()) {
+        params.set('q', query.trim());
+      } else {
+        params.delete('q');
+      }
+      router.replace(`/shop?${params.toString()}`, { scroll: false });
+    }, 400);
+    return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // Reset to page 1 whenever filter/search/sort changes
   useEffect(() => { setPageCount(1); }, [query, filters, sortBy]);
