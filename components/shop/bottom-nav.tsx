@@ -6,11 +6,11 @@ import { Home, ShoppingBag, Search, Heart, User } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const NAV_ITEMS = [
-  { href: '/',         icon: Home,        label: 'Home'     },
-  { href: '/shop',     icon: ShoppingBag, label: 'Shop'     },
-  { href: '/search',   icon: Search,      label: 'Search'   },
-  { href: '/wishlist', icon: Heart,       label: 'Wishlist' },
-  { href: '/account',  icon: User,        label: 'Account'  },
+  { href: '/', icon: Home, label: 'Home' },
+  { href: '/shop', icon: ShoppingBag, label: 'Shop' },
+  { href: '/search', icon: Search, label: 'Search' },
+  { href: '/account/wishlist', icon: Heart, label: 'Wishlist' },
+  { href: '/account', icon: User, label: 'Account' },
 ] as const;
 
 interface BottomNavBarProps {
@@ -21,9 +21,11 @@ interface BottomNavBarProps {
   variant?: 'default' | 'checkout';
 }
 
-export default function BottomNavBar({ variant = 'default' }: BottomNavBarProps) {
-  const pathname  = usePathname();
-  const isMuted   = variant === 'checkout';
+export default function BottomNavBar({
+  variant = 'default',
+}: BottomNavBarProps) {
+  const pathname = usePathname();
+  const isMuted = variant === 'checkout';
 
   return (
     <motion.nav
@@ -38,9 +40,10 @@ export default function BottomNavBar({ variant = 'default' }: BottomNavBarProps)
     >
       <ul className="h-full flex items-center">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
-          const active = !isMuted && (
-            pathname === href || (href === '/shop' && pathname.startsWith('/shop'))
-          );
+          const active =
+            !isMuted &&
+            (pathname === href ||
+              (href === '/shop' && pathname.startsWith('/shop')));
 
           return (
             <li key={href} className="flex-1">
