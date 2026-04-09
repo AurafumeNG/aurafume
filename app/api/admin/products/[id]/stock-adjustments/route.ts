@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import connectDB                     from '@/lib/mongodb';
-import Product                       from '@/models/Product';
-import StockAdjustment               from '@/models/StockAdjustment';
-import User                          from '@/models/User';
-import { requireAdmin }              from '@/lib/admin-auth';
-import type { ApiResponse }          from '@/types/auth';
-import mongoose                      from 'mongoose';
+import { NextRequest, NextResponse }        from 'next/server';
+import connectDB                            from '@/lib/mongodb';
+import Product                              from '@/models/Product';
+import StockAdjustment                      from '@/models/StockAdjustment';
+import User                                 from '@/models/User';
+import { requireAdmin }                     from '@/lib/admin-auth';
+import { sendRestockNotification }          from '@/lib/send-restock-notification';
+import type { ApiResponse }                 from '@/types/auth';
+import mongoose                             from 'mongoose';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -130,6 +131,17 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       adjustedBy,
       adjustedById:  admin.userId,
     });
+
+    // Notify wishlisting customers when a variant comes back in stock (0 → >0)
+    if (previousStock === 0 && newStock > 0) {
+      sendRestockNotification({
+        productId:   id,
+        productName: product.name,
+        productSlug: product.slug,
+        imageUrl:    product.images?.[0]?.url,
+        variantSize,
+      }).catch((err) => console.error('[restock notification]', err));
+    }
 
     return NextResponse.json<ApiResponse<unknown>>(
       { success: true, data: record.toObject() },

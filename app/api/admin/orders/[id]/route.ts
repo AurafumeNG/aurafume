@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import connectDB                    from '@/lib/mongodb';
-import Order                        from '@/models/Order';
-import { requireAdmin }             from '@/lib/admin-auth';
-import type { ApiResponse }         from '@/types/auth';
+import { NextRequest, NextResponse }        from 'next/server';
+import connectDB                            from '@/lib/mongodb';
+import Order                                from '@/models/Order';
+import { requireAdmin }                     from '@/lib/admin-auth';
+import { sendOrderStatusNotification }      from '@/lib/send-order-notification';
+import type { ApiResponse }                 from '@/types/auth';
 
 // ── GET — fetch single order ───────────────────────────────────────────────────
 
@@ -64,18 +65,46 @@ export async function PATCH(
 
   try {
     await connectDB();
-    const order = await Order.findByIdAndUpdate(
-      id,
-      { status: newStatus },
-      { new: true, select: 'orderNumber status updatedAt' },
-    ).lean();
 
-    if (!order) {
+    // Fetch full order first so we can notify the customer
+    const existing = await Order.findById(id)
+      .select('orderNumber userId contact items pricing status')
+      .lean() as {
+        orderNumber: string;
+        userId?:     { toString(): string };
+        contact:     { email: string; firstName: string };
+        items:       Array<{ name: string; qty: number }>;
+        pricing:     { total: number };
+        status:      string;
+      } | null;
+
+    if (!existing) {
       return NextResponse.json<ApiResponse>({ error: 'Order not found.' }, { status: 404 });
     }
 
+    // Skip update if the status isn't actually changing
+    if (existing.status === newStatus) {
+      return NextResponse.json<ApiResponse<{ orderNumber: string; status: string }>>(
+        { success: true, data: { orderNumber: existing.orderNumber, status: newStatus } },
+      );
+    }
+
+    await Order.findByIdAndUpdate(id, { status: newStatus });
+
+    // Fire-and-forget notification — never let it block the response
+    sendOrderStatusNotification({
+      orderId:          id,
+      orderNumber:      existing.orderNumber,
+      userId:           existing.userId?.toString(),
+      contactEmail:     existing.contact.email,
+      contactFirstName: existing.contact.firstName,
+      newStatus:        newStatus as Parameters<typeof sendOrderStatusNotification>[0]['newStatus'],
+      items:            existing.items.map((i) => ({ name: i.name, qty: i.qty })),
+      total:            existing.pricing.total,
+    }).catch((err) => console.error('[order status notification]', err));
+
     return NextResponse.json<ApiResponse<{ orderNumber: string; status: string }>>(
-      { success: true, data: { orderNumber: (order as { orderNumber: string }).orderNumber, status: newStatus } },
+      { success: true, data: { orderNumber: existing.orderNumber, status: newStatus } },
     );
   } catch (err) {
     console.error('[api/admin/orders PATCH]', err);

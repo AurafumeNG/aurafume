@@ -1,19 +1,83 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter }                                 from 'next/navigation';
 import {
   ChevronLeft, Mail, Bell, BellOff, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth } from '@/components/auth/auth-context';
+import { useAuth }                 from '@/components/auth/auth-context';
 import type { INotificationPreferences } from '@/models/User';
+
+// ── Web push helpers ──────────────────────────────────────────────────────────
+
+/** Convert a VAPID URL-base64 public key to the Uint8Array the browser expects */
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+async function subscribeToPush(): Promise<PushSubscription | null> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!vapidKey) return null;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // Re-use existing subscription if one exists
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return existing;
+
+    return await reg.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+    });
+  } catch (err) {
+    console.warn('[push] subscribe failed:', err);
+    return null;
+  }
+}
+
+async function savePushSubscription(sub: PushSubscription): Promise<void> {
+  const json = sub.toJSON() as {
+    endpoint: string;
+    keys?: { p256dh?: string; auth?: string };
+  };
+  await fetch('/api/notifications/push-subscription', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      endpoint: json.endpoint,
+      keys:     { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+    }),
+  });
+}
+
+async function removePushSubscription(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch('/api/notifications/push-subscription', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ endpoint: sub.endpoint }),
+    });
+    await sub.unsubscribe();
+  } catch (err) {
+    console.warn('[push] unsubscribe failed:', err);
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type PrefPath =
   | 'email.orderUpdates' | 'email.promotions' | 'email.newArrivals'
   | 'email.restockedItems' | 'email.newsletter'
-  | 'push.enabled' | 'push.orderStatusChanges' | 'push.flashSales' | 'push.deliveryUpdates';
+  | 'push.enabled' | 'push.orderStatusChanges' | 'push.flashSales'
+  | 'push.deliveryUpdates' | 'push.restockedItems';
 
 type Permission = 'default' | 'granted' | 'denied' | 'unsupported';
 
@@ -34,6 +98,7 @@ const DEFAULT_PREFS: INotificationPreferences = {
     orderStatusChanges: true,
     flashSales:         false,
     deliveryUpdates:    true,
+    restockedItems:     true,
   },
 };
 
@@ -330,25 +395,40 @@ export default function NotificationsPage() {
     }
   }, [fetchPrefs]);
 
-  // ── Push master toggle with permission flow ───────────────────────────────
+  // ── Track whether we're in the middle of a push subscribe/unsubscribe op ──
+  const pushOpRef = useRef(false);
+
+  // ── Push master toggle with permission + subscription flow ────────────────
   const handlePushMasterToggle = useCallback(async () => {
-    if (prefs.push.enabled) {
-      // Turning off — just update pref
-      await savePref('push.enabled', false);
-      return;
+    if (pushOpRef.current) return;
+    pushOpRef.current = true;
+
+    try {
+      if (prefs.push.enabled) {
+        // Turning off — unsubscribe from push, then update pref
+        await removePushSubscription();
+        await savePref('push.enabled', false);
+        return;
+      }
+
+      // Turning on — need browser permission
+      if (permission === 'unsupported') return;
+      if (permission === 'denied')      return; // banner already shown
+
+      if (permission === 'default') {
+        const result = await Notification.requestPermission();
+        setPermission(result as Permission);
+        if (result !== 'granted') return;
+      }
+
+      // Subscribe and save subscription to server
+      const sub = await subscribeToPush();
+      if (sub) await savePushSubscription(sub);
+
+      await savePref('push.enabled', true);
+    } finally {
+      pushOpRef.current = false;
     }
-
-    // Turning on — need permission
-    if (permission === 'unsupported') return;
-    if (permission === 'denied') return;   // banner already shown
-
-    if (permission === 'default') {
-      const result = await Notification.requestPermission();
-      setPermission(result as Permission);
-      if (result !== 'granted') return;
-    }
-
-    await savePref('push.enabled', true);
   }, [prefs.push.enabled, permission, savePref]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -488,12 +568,20 @@ export default function NotificationsPage() {
               onChange={() => savePref('push.deliveryUpdates', !prefs.push.deliveryUpdates)}
               saving={isSaving('push.deliveryUpdates')}
               disabled={!pushActive}
+            />
+            <ToggleRow
+              label="Restocked Items"
+              description="Instant alert when a wishlisted fragrance comes back in stock"
+              checked={prefs.push.restockedItems}
+              onChange={() => savePref('push.restockedItems', !prefs.push.restockedItems)}
+              saving={isSaving('push.restockedItems')}
+              disabled={!pushActive}
               last
             />
           </Section>
 
           {/* Push hint */}
-          <p className="mt-2 px-1 text-[0.48rem] tracking-[0.1em] text-muted-foreground/35 leading-relaxed">
+          <p className="mt-2 px-1 text-[0.48rem] tracking-widest text-muted-foreground/35 leading-relaxed">
             Push notifications require browser permission and only work while the app is installed or open.
           </p>
         </motion.div>

@@ -15,6 +15,7 @@ export interface INotificationPreferences {
     orderStatusChanges: boolean;
     flashSales:         boolean;
     deliveryUpdates:    boolean;
+    restockedItems:     boolean;
   };
 }
 
@@ -75,6 +76,7 @@ const NotificationPreferencesSchema = new Schema(
       orderStatusChanges: { type: Boolean, default: true  },
       flashSales:         { type: Boolean, default: false },
       deliveryUpdates:    { type: Boolean, default: true  },
+      restockedItems:     { type: Boolean, default: true  },
     },
   },
   { _id: false },

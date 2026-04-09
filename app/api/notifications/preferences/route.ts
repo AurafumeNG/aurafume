@@ -54,7 +54,8 @@ export async function PATCH(req: NextRequest) {
     const ALLOWED: Array<keyof INotificationPreferences['email'] | keyof INotificationPreferences['push'] | string> = [
       'email.orderUpdates', 'email.promotions', 'email.newArrivals',
       'email.restockedItems', 'email.newsletter',
-      'push.enabled', 'push.orderStatusChanges', 'push.flashSales', 'push.deliveryUpdates',
+      'push.enabled', 'push.orderStatusChanges', 'push.flashSales',
+      'push.deliveryUpdates', 'push.restockedItems',
     ];
     if (!ALLOWED.includes(path)) {
       return NextResponse.json<ApiResponse>({ error: 'Invalid preference path.' }, { status: 400 });

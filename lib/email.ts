@@ -117,3 +117,150 @@ export async function sendPasswordResetEmail(email: string, token: string, first
     `),
   });
 }
+
+// ── Restock (back-in-stock) email ─────────────────────────────────────────────
+
+interface RestockEmailOptions {
+  email:        string;
+  firstName:    string;
+  productName:  string;
+  productSlug:  string;
+  imageUrl?:    string;
+  variantSize:  string;
+}
+
+export async function sendRestockEmail({
+  email,
+  firstName,
+  productName,
+  productSlug,
+  imageUrl,
+  variantSize,
+}: RestockEmailOptions) {
+  const productUrl = `${BASE_URL}/shop/${productSlug}`;
+
+  const imageBlock = imageUrl
+    ? `<div style="margin-bottom:28px;line-height:0;"><img src="${imageUrl}" alt="${productName}" style="width:100%;max-height:260px;object-fit:cover;display:block;" /></div>`
+    : '';
+
+  await transporter.sendMail({
+    from:    FROM,
+    to:      email,
+    subject: `Back in Stock — ${productName} | AuraFume`,
+    html: shell(`
+      <h1 style="margin:0 0 6px;font-size:20px;font-weight:300;letter-spacing:0.18em;text-transform:uppercase;color:#f0f0f0;">Back in Stock</h1>
+      <p style="margin:0 0 28px;font-size:12px;color:#666;letter-spacing:0.06em;">Hi ${firstName},</p>
+      ${imageBlock}
+      ${bodyText(`Good news — <strong style="color:#e0e0e0;">${productName}</strong> <span style="color:#c5a76d;">(${variantSize})</span> is back in stock and ready to ship.`)}
+      ${bodyText(`These sell out quickly. Secure yours before it's gone again.`)}
+      ${CTAButton(productUrl, 'Shop Now')}
+      ${smallText(`You're receiving this because you wishlisted this item. <a href="${BASE_URL}/account/notifications" style="color:#c5a76d;text-decoration:none;">Manage preferences</a>.`)}
+    `),
+  });
+}
+
+// ── Order status change email ──────────────────────────────────────────────────
+
+type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+
+interface OrderStatusEmailOptions {
+  email:       string;
+  firstName:   string;
+  orderNumber: string;
+  status:      OrderStatus;
+  items:       Array<{ name: string; qty: number }>;
+  total:       number;
+}
+
+const STATUS_COPY: Record<OrderStatus, { headline: string; lead: string; cta: string }> = {
+  pending:    {
+    headline: 'Order Received',
+    lead:     'We\'ve received your order and it\'s under review. You\'ll hear from us shortly.',
+    cta:      'View Order',
+  },
+  confirmed:  {
+    headline: 'Order Confirmed',
+    lead:     'Your order has been confirmed and will be prepared for shipment shortly.',
+    cta:      'View Order',
+  },
+  processing: {
+    headline: 'Being Prepared',
+    lead:     'Our team is carefully selecting and packing your fragrances.',
+    cta:      'View Order',
+  },
+  shipped:    {
+    headline: 'On Its Way',
+    lead:     'Great news — your order has been dispatched and is on its way to you.',
+    cta:      'View Order',
+  },
+  delivered:  {
+    headline: 'Delivered',
+    lead:     'Your AuraFume order has arrived. We hope you love every note.',
+    cta:      'View My Orders',
+  },
+  cancelled:  {
+    headline: 'Order Cancelled',
+    lead:     'Your order has been cancelled. If this was unexpected, please reach out to our team.',
+    cta:      'Contact Support',
+  },
+};
+
+export async function sendOrderStatusEmail({
+  email,
+  firstName,
+  orderNumber,
+  status,
+  items,
+  total,
+}: OrderStatusEmailOptions) {
+  const copy      = STATUS_COPY[status];
+  const ordersUrl = `${BASE_URL}/account/orders`;
+
+  const statusBadgeColor: Record<OrderStatus, string> = {
+    pending:    '#666',
+    confirmed:  '#c5a76d',
+    processing: '#c5a76d',
+    shipped:    '#7db87d',
+    delivered:  '#7db87d',
+    cancelled:  '#b87d7d',
+  };
+
+  const badge = `<span style="display:inline-block;margin-bottom:28px;padding:4px 12px;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;font-weight:700;background:${statusBadgeColor[status]}22;color:${statusBadgeColor[status]};border:1px solid ${statusBadgeColor[status]}44;">${status.toUpperCase()}</span>`;
+
+  const itemRows = items
+    .map(
+      (i) =>
+        `<tr>
+          <td style="padding:5px 0;font-size:12px;color:#999;letter-spacing:0.03em;">${i.name}</td>
+          <td style="padding:5px 0;font-size:12px;color:#666;text-align:right;letter-spacing:0.04em;">× ${i.qty}</td>
+        </tr>`,
+    )
+    .join('');
+
+  await transporter.sendMail({
+    from:    FROM,
+    to:      email,
+    subject: `${copy.headline} — ${orderNumber} | AuraFume`,
+    html: shell(`
+      <h1 style="margin:0 0 6px;font-size:20px;font-weight:300;letter-spacing:0.18em;text-transform:uppercase;color:#f0f0f0;">${copy.headline}</h1>
+      <p style="margin:0 0 24px;font-size:12px;color:#666;letter-spacing:0.06em;">Hi ${firstName},</p>
+      ${badge}
+      ${bodyText(copy.lead)}
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border-top:1px solid #1e1e1e;border-bottom:1px solid #1e1e1e;">
+        <tr>
+          <td style="padding:10px 0 4px;font-size:10px;color:#555;letter-spacing:0.12em;text-transform:uppercase;">Order</td>
+          <td style="padding:10px 0 4px;font-size:12px;color:#c5a76d;text-align:right;letter-spacing:0.06em;">${orderNumber}</td>
+        </tr>
+        ${itemRows}
+        <tr>
+          <td style="padding:10px 0 4px;font-size:10px;color:#555;letter-spacing:0.12em;text-transform:uppercase;border-top:1px solid #1e1e1e;">Total</td>
+          <td style="padding:10px 0 4px;font-size:13px;color:#e0e0e0;text-align:right;font-weight:500;border-top:1px solid #1e1e1e;">&#x20A6;${total.toLocaleString('en-NG')}</td>
+        </tr>
+      </table>
+
+      ${CTAButton(ordersUrl, copy.cta)}
+      ${smallText('Questions? Reply to this email and we\'ll be happy to help.')}
+    `),
+  });
+}
