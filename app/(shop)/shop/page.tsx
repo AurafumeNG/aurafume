@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import SearchBar      from '@/components/shop/search-bar';
 import FilterSortBar  from '@/components/shop/filter-sort-bar';
@@ -35,6 +35,14 @@ function countActiveFilters(f: ShopFilters): number {
 
 // ── Page ─────────────────────────────────────────────────────────────
 export default function ShopPage() {
+  return (
+    <Suspense>
+      <ShopPageInner />
+    </Suspense>
+  );
+}
+
+function ShopPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query,        setQuery]        = useState(() => searchParams.get('q') ?? '');
