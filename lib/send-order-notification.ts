@@ -15,13 +15,15 @@ import User                        from '@/models/User';
 import PushSubscriptionModel       from '@/models/PushSubscription';
 import { sendOrderStatusEmail }    from '@/lib/email';
 
-// ── VAPID configuration ───────────────────────────────────────────────────────
+// ── VAPID configuration (lazy — only called at request time, not build time) ──
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!,
-);
+function initVapid() {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!,
+  );
+}
 
 // ── Push payload copy per status ──────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ export async function sendOrderStatusNotification(data: OrderNotificationPayload
   // ── Web push ──────────────────────────────────────────────────────────────
   if (pushEnabled && userId) {
     try {
+      initVapid();
       const subscriptions = await PushSubscriptionModel.find({ userId }).lean();
 
       if (subscriptions.length === 0) return;

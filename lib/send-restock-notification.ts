@@ -17,13 +17,15 @@ import User                       from '@/models/User';
 import PushSubscriptionModel      from '@/models/PushSubscription';
 import { sendRestockEmail }       from '@/lib/email';
 
-// ── VAPID ─────────────────────────────────────────────────────────────────────
+// ── VAPID configuration (lazy — only called at request time, not build time) ──
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!,
-);
+function initVapid() {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!,
+  );
+}
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
@@ -84,6 +86,7 @@ export async function sendRestockNotification(data: RestockNotificationPayload) 
   // ── Web push ──────────────────────────────────────────────────────────────
 
   if (pushUserIds.length > 0) {
+    initVapid();
     const pushPayload = JSON.stringify({
       title: `Back in Stock — ${productName}`,
       body:  `Your ${variantSize} is available again. Tap to shop before it sells out.`,
