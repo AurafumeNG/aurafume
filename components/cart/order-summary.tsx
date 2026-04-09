@@ -12,10 +12,24 @@ const FREE_DELIVERY_THRESHOLD = 200_000; // must match delivery-progress.tsx
 
 function PaystackMark() {
   return (
-    <svg width="54" height="22" viewBox="0 0 54 22" fill="none" aria-label="Paystack">
+    <svg
+      width="54"
+      height="22"
+      viewBox="0 0 54 22"
+      fill="none"
+      aria-label="Paystack"
+    >
       <rect width="54" height="22" rx="3" fill="#00C3F7" fillOpacity="0.12" />
       {/* wordmark simplified */}
-      <text x="5" y="15" fontFamily="'Arial', sans-serif" fontSize="8.5" fontWeight="700" fill="#00C3F7" letterSpacing="0.01em">
+      <text
+        x="5"
+        y="15"
+        fontFamily="'Arial', sans-serif"
+        fontSize="8.5"
+        fontWeight="700"
+        fill="#00C3F7"
+        letterSpacing="0.01em"
+      >
         Paystack
       </text>
     </svg>
@@ -24,9 +38,24 @@ function PaystackMark() {
 
 function VisaMark() {
   return (
-    <svg width="40" height="22" viewBox="0 0 40 22" fill="none" aria-label="Visa">
+    <svg
+      width="40"
+      height="22"
+      viewBox="0 0 40 22"
+      fill="none"
+      aria-label="Visa"
+    >
       <rect width="40" height="22" rx="3" fill="#1A1F71" fillOpacity="0.08" />
-      <text x="6" y="15.5" fontFamily="'Arial', sans-serif" fontSize="11" fontWeight="800" fontStyle="italic" fill="#1A1F71" letterSpacing="-0.01em">
+      <text
+        x="6"
+        y="15.5"
+        fontFamily="'Arial', sans-serif"
+        fontSize="11"
+        fontWeight="800"
+        fontStyle="italic"
+        fill="#1A1F71"
+        letterSpacing="-0.01em"
+      >
         VISA
       </text>
     </svg>
@@ -35,24 +64,41 @@ function VisaMark() {
 
 function MastercardMark() {
   return (
-    <svg width="36" height="22" viewBox="0 0 36 22" fill="none" aria-label="Mastercard">
+    <svg
+      width="36"
+      height="22"
+      viewBox="0 0 36 22"
+      fill="none"
+      aria-label="Mastercard"
+    >
       <rect width="36" height="22" rx="3" fill="transparent" />
       <circle cx="14" cy="11" r="8" fill="#EB001B" />
       <circle cx="22" cy="11" r="8" fill="#F79E1B" />
       {/* overlap */}
-      <path
-        d="M18 4.6a8 8 0 0 1 0 12.8A8 8 0 0 1 18 4.6Z"
-        fill="#FF5F00"
-      />
+      <path d="M18 4.6a8 8 0 0 1 0 12.8A8 8 0 0 1 18 4.6Z" fill="#FF5F00" />
     </svg>
   );
 }
 
 function VerveMark() {
   return (
-    <svg width="42" height="22" viewBox="0 0 42 22" fill="none" aria-label="Verve">
+    <svg
+      width="42"
+      height="22"
+      viewBox="0 0 42 22"
+      fill="none"
+      aria-label="Verve"
+    >
       <rect width="42" height="22" rx="3" fill="#014A92" fillOpacity="0.08" />
-      <text x="5" y="15" fontFamily="'Arial', sans-serif" fontSize="9.5" fontWeight="700" fill="#014A92" letterSpacing="0.04em">
+      <text
+        x="5"
+        y="15"
+        fontFamily="'Arial', sans-serif"
+        fontSize="9.5"
+        fontWeight="700"
+        fill="#014A92"
+        letterSpacing="0.04em"
+      >
         VERVE
       </text>
     </svg>
@@ -70,9 +116,9 @@ function PaymentIcons() {
         <MastercardMark />
         <VerveMark />
       </div>
-      <p className="text-[0.54rem] tracking-[0.12em] uppercase text-muted-foreground/60">
+      {/* <p className="text-[0.54rem] tracking-[0.12em] uppercase text-muted-foreground/60">
         Secure & encrypted checkout
-      </p>
+      </p> */}
     </div>
   );
 }
@@ -93,7 +139,9 @@ function Line({
   large?: boolean;
 }) {
   return (
-    <div className={`flex items-baseline justify-between gap-4 ${large ? 'pt-1' : ''}`}>
+    <div
+      className={`flex items-baseline justify-between gap-4 ${large ? 'pt-1' : ''}`}
+    >
       <div className="flex flex-col">
         <span
           className={`${large ? 'text-[0.78rem] font-semibold text-foreground' : 'text-[0.72rem] text-foreground/70'} tracking-[0.02em]`}
@@ -130,9 +178,9 @@ export default function OrderSummary() {
 
   const isFreeShipping = appliedCoupon?.type === 'free-shipping';
   const discountAmount = appliedCoupon?.discountAmount ?? 0;
-  const wrapFee        = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
-  const deliveryFee    = cartTotal >= FREE_DELIVERY_THRESHOLD ? 0 : null; // null = not yet known
-  const finalTotal     = cartTotal - discountAmount + wrapFee;
+  const wrapFee = giftOptions.wrapping ? GIFT_WRAP_FEE : 0;
+  const deliveryFee = cartTotal >= FREE_DELIVERY_THRESHOLD ? 0 : null; // null = not yet known
+  const finalTotal = cartTotal - discountAmount + wrapFee;
 
   return (
     <motion.section
@@ -142,16 +190,12 @@ export default function OrderSummary() {
     >
       {/* ── Summary card ── */}
       <div className="border border-border p-4 space-y-2.5">
-
         <h2 className="text-[0.62rem] tracking-[0.32em] uppercase text-muted-foreground mb-3">
           Order Summary
         </h2>
 
         {/* Subtotal */}
-        <Line
-          label="Subtotal"
-          value={`₦${cartTotal.toLocaleString()}`}
-        />
+        <Line label="Subtotal" value={`₦${cartTotal.toLocaleString()}`} />
 
         {/* Discount */}
         <AnimatePresence>
