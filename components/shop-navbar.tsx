@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   LogOut,
   ChevronRight,
+  ArrowRight,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/auth/auth-context';
@@ -23,6 +25,117 @@ import { useAuth } from '@/components/auth/auth-context';
 const GOLD_GRADIENT =
   'linear-gradient(135deg, oklch(0.68 0.11 70) 0%, oklch(0.78 0.09 78) 60%, oklch(0.72 0.10 74) 100%)';
 const GOLD = 'oklch(0.72 0.10 74)';
+
+// ── Search overlay ────────────────────────────────────────────────────────────
+function SearchOverlay({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [term, setTerm] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setTerm('');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const q = term.trim();
+    if (!q) return;
+    router.push(`/shop?q=${encodeURIComponent(q)}`);
+    onClose();
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            key="search-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-60 bg-background/80 backdrop-blur-md"
+            onClick={onClose}
+          />
+          <motion.div
+            key="search-panel"
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="fixed top-0 inset-x-0 z-61 bg-background border-b border-border shadow-lg px-4 sm:px-6 lg:px-8 pt-5 pb-6"
+          >
+            <div className="flex items-center justify-between mb-4 max-w-2xl mx-auto">
+              <span className="text-[0.55rem] tracking-[0.2em] uppercase text-muted-foreground/60 font-medium">
+                Search Fragrances
+              </span>
+              <button
+                onClick={onClose}
+                aria-label="Close search"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={18} strokeWidth={1.8} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="relative max-w-2xl mx-auto flex items-center">
+              <Search
+                size={17}
+                strokeWidth={1.8}
+                className="absolute left-4 text-muted-foreground pointer-events-none z-10 shrink-0"
+              />
+              <input
+                ref={inputRef}
+                type="search"
+                value={term}
+                onChange={e => setTerm(e.target.value)}
+                placeholder="Search by name, scent family…"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full h-12 pl-11 pr-14 bg-card border border-border text-foreground text-[0.9rem] placeholder:text-muted-foreground/50 outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all duration-200"
+              />
+              <button
+                type="submit"
+                aria-label="Go"
+                className="absolute right-3 flex items-center justify-center w-8 h-8 text-muted-foreground hover:text-accent transition-colors disabled:opacity-30"
+                disabled={!term.trim()}
+              >
+                <ArrowRight size={17} strokeWidth={1.8} />
+              </button>
+            </form>
+            <p className="text-center text-[0.52rem] tracking-[0.12em] uppercase text-muted-foreground/40 mt-3">
+              Press <kbd className="font-mono">Enter</kbd> to search · <kbd className="font-mono">Esc</kbd> to close
+            </p>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
 
 // ── Mini avatar ───────────────────────────────────────────────────────────────
 function NavAvatar({ name, src }: { name: string; src?: string }) {
@@ -350,16 +463,13 @@ function MobileUserSheet({
 // ── Main navbar ───────────────────────────────────────────────────────────────
 interface ShopNavBarProps {
   cartCount?: number;
-  onSearchOpen?: () => void;
 }
 
-export default function ShopNavBar({
-  cartCount = 0,
-  onSearchOpen,
-}: ShopNavBarProps) {
+export default function ShopNavBar({ cartCount = 0 }: ShopNavBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileSheet, setMobileSheet] = useState(false);
   const [logoutSheet, setLogoutSheet] = useState(false);
@@ -431,41 +541,65 @@ export default function ShopNavBar({
             </h1>
           </div>
 
-          {/* Right — search · user · cart */}
-          <div className="flex items-center justify-end gap-2 sm:gap-3.5">
+          {/* Right — search · wishlist · cart · user */}
+          <div className="flex items-center justify-end gap-4">
+            {/* Search */}
             <button
-              onClick={onSearchOpen}
               aria-label="Search"
-              className="flex items-center justify-center w-9 h-9 text-foreground/70 hover:text-foreground transition-colors"
+              onClick={() => setSearchOpen(true)}
+              className="text-foreground/70 hover:text-accent transition-colors"
             >
-              <Search size={18} strokeWidth={1.8} />
+              <Search size={20} />
             </button>
 
-            {/* ── User indicator ── */}
+            {/* Wishlist */}
+            <Link
+              href="/account/wishlist"
+              aria-label="Wishlist"
+              className="hidden sm:block text-foreground/70 hover:text-accent transition-colors"
+            >
+              <Heart size={20} />
+            </Link>
+
+            {/* Cart */}
+            <Link
+              href="/cart"
+              aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ''}`}
+              className="relative text-foreground/70 hover:text-accent transition-colors"
+            >
+              <ShoppingCart size={20} />
+              {cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center leading-none">
+                  {cartCount > 99 ? '99+' : cartCount}
+                </span>
+              )}
+            </Link>
+
+            {/* User */}
             {user ? (
               <>
                 {/* Mobile: tap opens sheet */}
                 <button
                   onClick={() => setMobileSheet(true)}
                   aria-label="My account"
-                  className="sm:hidden flex items-center justify-center w-9 h-9"
+                  className="md:hidden flex items-center gap-1.5 group"
                 >
                   <NavAvatar name={user.firstName} src={user.avatar} />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: GOLD }}
+                  />
                 </button>
 
                 {/* Desktop: tap opens dropdown */}
-                <div
-                  ref={dropdownRef}
-                  className="z-[99] relative hidden sm:block"
-                >
+                <div ref={dropdownRef} className="relative hidden md:block">
                   <button
                     onClick={() => setDropdownOpen((v) => !v)}
                     aria-label="My account"
                     aria-expanded={dropdownOpen}
-                    className="flex items-center gap-2 h-9 px-1 group"
+                    className="flex items-center gap-1.5 group"
                   >
                     <NavAvatar name={user.firstName} src={user.avatar} />
-                    {/* Online dot */}
                     <span
                       className="w-1.5 h-1.5 rounded-full shrink-0"
                       style={{ background: GOLD }}
@@ -488,38 +622,20 @@ export default function ShopNavBar({
                 </div>
               </>
             ) : (
-              /* Not logged in — show user icon → /login */
               <Link
                 href="/login"
                 aria-label="Sign in"
-                className="flex items-center justify-center w-9 h-9 text-foreground/70 hover:text-foreground transition-colors"
+                className="hidden md:flex items-center justify-center text-foreground/70 hover:text-accent transition-colors"
               >
-                <User size={18} strokeWidth={1.8} />
+                <User size={20} />
               </Link>
             )}
-
-            {/* Cart */}
-            <Link
-              href="/cart"
-              aria-label={`Cart${cartCount > 0 ? `, ${cartCount} item${cartCount > 1 ? 's' : ''}` : ''}`}
-              className="relative flex items-center justify-center w-9 h-9 text-foreground/70 hover:text-foreground transition-colors"
-            >
-              <ShoppingCart size={18} strokeWidth={1.8} />
-              {cartCount > 0 && (
-                <motion.span
-                  key={cartCount}
-                  initial={{ scale: 0.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-                  className="absolute -top-1 -right-1 bg-accent text-accent-foreground text-[9px] font-bold min-w-[16px] h-4 px-0.5 rounded-full flex items-center justify-center leading-none tabular-nums"
-                >
-                  {cartCount > 99 ? '99+' : cartCount}
-                </motion.span>
-              )}
-            </Link>
           </div>
         </div>
       </motion.header>
+
+      {/* Search overlay */}
+      <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Mobile: full user menu sheet */}
       {user && (

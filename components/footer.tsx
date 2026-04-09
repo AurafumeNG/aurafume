@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ArrowUp, Landmark } from 'lucide-react';
+import Image from 'next/image';
 
 // ── Inline brand SVG icons ──────────────────────────────────────────
 function IgIcon({ size = 18 }: { size?: number }) {
@@ -92,7 +93,7 @@ const navColumns = [
     id: 'legal',
     title: 'Legal',
     links: [
-      { label: 'Privacy Policy', href: '/privacy' },
+      { label: 'Privacy Policy', href: '/privacy-policy' },
       { label: 'Terms of Service', href: '/terms' },
       { label: 'Cookie Policy', href: '/cookies' },
     ],
@@ -211,14 +212,25 @@ export default function Footer() {
           {/* Brand column */}
           <div className="md:col-span-1 pb-8 md:pb-0 border-b border-primary-foreground/10 md:border-none">
             {/* Wordmark */}
-            <Link href="/" className="inline-block mb-4">
+            {/* <Link href="/" className="inline-block mb-4">
               <span className="font-heading text-[1.45rem] tracking-[0.12em] text-primary-foreground">
                 AuraFume
               </span>
+            </Link> */}
+
+            <Link href="/" className="shrink-0">
+              <Image
+                src="/logo/aurafumeng-logo-white.png"
+                alt="AuraFume"
+                width={120}
+                height={40}
+                className="h-10 w-auto object-contain"
+                priority
+              />
             </Link>
 
             {/* Tagline */}
-            <p className="text-primary-foreground/40 text-[0.75rem] leading-relaxed mb-8 max-w-[200px]">
+            <p className="mt-3 text-primary-foreground/40 text-[0.75rem] leading-relaxed mb-8 max-w-[200px]">
               Wear your aura. Born in Lagos, worn worldwide.
             </p>
 

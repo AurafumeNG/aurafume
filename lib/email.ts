@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-const transporter = nodemailer.createTransport({
+export const transporter = nodemailer.createTransport({
   host:   process.env.SMTP_HOST,
   port:   Number(process.env.SMTP_PORT ?? 587),
   secure: false,
@@ -15,7 +15,7 @@ const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
 
 // ── HTML email shell ───────────────────────────────────────────────────────────
 
-function shell(content: string) {
+export function shell(content: string) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -47,7 +47,7 @@ function shell(content: string) {
 const CTAButton = (href: string, label: string) =>
   `<a href="${href}" style="display:inline-block;margin-top:8px;padding:14px 36px;background:linear-gradient(135deg,#c5a76d,#e8c87a);color:#0a0a0a;text-decoration:none;font-size:10px;letter-spacing:0.28em;text-transform:uppercase;font-weight:700;">${label}</a>`;
 
-const bodyText = (text: string) =>
+export const bodyText = (text: string) =>
   `<p style="margin:0 0 28px;font-size:13px;line-height:1.8;color:#999;letter-spacing:0.03em;">${text}</p>`;
 
 const smallText = (text: string) =>
