@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle } from 'lucide-react';
 import { useCheckout } from './checkout-context';
+import { useAuth } from '@/components/auth/auth-context';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ function Field({
 export default function ContactInfo() {
   const uid = useId();
   const { setContactSummary } = useCheckout();
+  const { logout } = useAuth();
 
   const [form, setForm] = useState<ContactForm>({
     firstName: '',
@@ -224,20 +226,20 @@ export default function ContactInfo() {
               {authUser.firstName} {authUser.lastName}
             </span>
             {' '}·{' '}
-            <Link
-              href="/api/auth/logout"
-              prefetch={false}
+            <button
+              type="button"
+              onClick={() => logout()}
               className="underline underline-offset-2 hover:text-accent transition-colors"
             >
               Sign out
-            </Link>
+            </button>
           </p>
         </motion.div>
       ) : (
         <p className="text-[0.7rem] text-muted-foreground mb-5">
           Already have an account?{' '}
           <Link
-            href="/login"
+            href="/login?redirect=/checkout"
             className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
           >
             Log in

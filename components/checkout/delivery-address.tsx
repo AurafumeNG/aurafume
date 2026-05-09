@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useId, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle, Check, ChevronDown, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCheckout } from './checkout-context';
@@ -320,28 +321,54 @@ function AddressCard({
 
 // ── New / edit address form ────────────────────────────────────────────────────
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 function AddressFormFields({
   uid,
   initial,
   onCancel,
   onFormChange,
   showSaveCheckbox,
+  onSaveAddress,
 }: {
   uid:              string;
   initial?:         AddressForm;
   onCancel?:        () => void;
   onFormChange?:    (form: AddressForm) => void;
   showSaveCheckbox: boolean;
+  onSaveAddress?:   (form: AddressForm) => Promise<void>;
 }) {
   const [form, setForm]         = useState<AddressForm>(initial ?? EMPTY_FORM);
   const [touched, setTouched]   = useState<TouchedMap>({});
   const [saveAddr, setSaveAddr] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   const errors = validate(form);
+  const isValid = Object.keys(errors).length === 0;
 
   useEffect(() => {
-    if (Object.keys(errors).length === 0) onFormChange?.(form);
-  }, [form, errors, onFormChange]);
+    if (isValid) onFormChange?.(form);
+  }, [form, isValid, onFormChange]);
+
+  // Reset save status when form changes after an error
+  useEffect(() => {
+    if (saveStatus === 'error') setSaveStatus('idle');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  async function handleSaveToggle(checked: boolean) {
+    setSaveAddr(checked);
+    if (!checked || !isValid || !onSaveAddress) return;
+
+    setSaveStatus('saving');
+    try {
+      await onSaveAddress(form);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+      setSaveAddr(false);
+    }
+  }
 
   function set(field: FieldKey) {
     return (value: string) => setForm(prev => ({ ...prev, [field]: value }));
@@ -464,13 +491,44 @@ function AddressFormFields({
       />
 
       {showSaveCheckbox && (
-        <div className="pt-1">
+        <div className="pt-1 space-y-1">
           <Checkbox
             id={`${uid}-save`}
-            label="Save this address for future orders"
+            label="Save this address to my account"
             checked={saveAddr}
-            onChange={setSaveAddr}
+            onChange={handleSaveToggle}
           />
+          <AnimatePresence>
+            {saveStatus === 'saving' && (
+              <motion.p
+                key="saving"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-[0.58rem] tracking-[0.06em] text-muted-foreground pl-7"
+              >
+                Saving…
+              </motion.p>
+            )}
+            {saveStatus === 'saved' && (
+              <motion.p
+                key="saved"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex items-center gap-1 text-[0.58rem] tracking-[0.06em] pl-7"
+                style={{ color: 'oklch(0.6 0.15 145)' }}
+              >
+                <Check size={10} strokeWidth={2.5} />
+                Address saved to your account
+              </motion.p>
+            )}
+            {saveStatus === 'error' && (
+              <motion.p
+                key="error"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-[0.58rem] tracking-[0.06em] text-destructive pl-7"
+              >
+                Could not save address. Please try again.
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -509,6 +567,7 @@ export default function DeliveryAddress() {
   const [selectedId,     setSelectedId]     = useState<string | 'new' | null>(null);
   const [editingAddr,    setEditingAddr]     = useState<SavedAddress | null>(null);
   const [loading,        setLoading]         = useState(true);
+  const [isGuest,        setIsGuest]         = useState(false);
 
   // ── Fetch user addresses on mount ──────────────────────────────────────────
   const fetchAddresses = useCallback(async () => {
@@ -516,6 +575,7 @@ export default function DeliveryAddress() {
       const res = await fetch('/api/addresses', { credentials: 'include' });
       if (!res.ok) {
         // Not authenticated — guest checkout, show empty form
+        setIsGuest(true);
         setSelectedId('new');
         setLoading(false);
         return;
@@ -533,16 +593,14 @@ export default function DeliveryAddress() {
         country:    a.country,
       }));
       setSavedAddresses(addresses);
-      // Pre-select the default address (isDefault first, fallback to first)
       if (addresses.length > 0) {
-        // API already returns addresses; isDefault is on the ApiAddress, not SavedAddress.
-        // Re-check from raw data to find the default.
         const rawDefault = (data.data ?? []).find(a => a.isDefault);
         setSelectedId(rawDefault ? rawDefault._id : addresses[0].id);
       } else {
         setSelectedId('new');
       }
     } catch {
+      setIsGuest(true);
       setSelectedId('new');
     } finally {
       setLoading(false);
@@ -553,7 +611,7 @@ export default function DeliveryAddress() {
 
   const hasSaved = savedAddresses.length > 0;
 
-  // ── Sync the selected saved address to checkout context ───────────────────
+  // ── Sync selected saved address to checkout context ───────────────────────
   useEffect(() => {
     if (!selectedId || selectedId === 'new') return;
     const addr = savedAddresses.find(a => a.id === selectedId);
@@ -568,9 +626,30 @@ export default function DeliveryAddress() {
     }
   }, [selectedId, savedAddresses, setAddressSummary]);
 
+  // ── Save address to account ────────────────────────────────────────────────
+  async function handleSaveAddress(form: AddressForm) {
+    const res = await fetch('/api/addresses', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label:      'Home',
+        street:     form.street,
+        apt:        form.apt || undefined,
+        city:       form.city,
+        state:      form.state,
+        postalCode: form.postalCode || '',
+        country:    form.country,
+        isDefault:  savedAddresses.length === 0,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json() as { error?: string };
+      throw new Error(data.error ?? 'Failed to save address');
+    }
+  }
+
   function handleDelete(id: string) {
-    // Optimistic removal (the account address-sheet handles real API delete; here
-    // we just remove from the local list so the user can pick another address)
     setSavedAddresses(prev => prev.filter(a => a.id !== id));
     if (selectedId === id) {
       const remaining = savedAddresses.filter(a => a.id !== id);
@@ -643,7 +722,8 @@ export default function DeliveryAddress() {
               <AddressFormFields
                 uid={uid}
                 initial={editingAddr ?? undefined}
-                showSaveCheckbox={!editingAddr}
+                showSaveCheckbox={!isGuest && !editingAddr}
+                onSaveAddress={!isGuest ? handleSaveAddress : undefined}
                 onCancel={hasSaved ? () => {
                   setSelectedId(savedAddresses[0].id);
                   setEditingAddr(null);
@@ -656,6 +736,20 @@ export default function DeliveryAddress() {
                   country: addr.country,
                 })}
               />
+
+              {/* Guest nudge — shown only when guest is entering a new address */}
+              {isGuest && (
+                <p className="mt-4 text-[0.62rem] tracking-[0.04em] text-muted-foreground/70 leading-relaxed">
+                  Have an account?{' '}
+                  <Link
+                    href="/login?redirect=/checkout"
+                    className="text-foreground underline underline-offset-2 hover:text-accent transition-colors"
+                  >
+                    Log in
+                  </Link>
+                  {' '}to use your saved addresses.
+                </p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
