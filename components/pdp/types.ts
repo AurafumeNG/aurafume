@@ -31,6 +31,15 @@ export interface PDPProduct {
   description: string;
   specs: FragranceSpecs;
   occasions: string[];
-  relatedSlugs: string[];
-  bundleSlugs: string[];
+}
+
+/** Compact product summary used by related / bundle / upsell rails. */
+export interface RelatedProduct {
+  id: string;
+  slug: string;
+  name: string;
+  scentFamily: string;
+  badge?: 'New' | 'Best Seller' | 'Low Stock';
+  image: string;
+  variants: SizeVariant[];
 }

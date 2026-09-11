@@ -6,18 +6,15 @@ import { ShoppingBag, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useCart } from '@/components/shop/cart-context';
-import { PRODUCTS } from './product-data';
+import type { RelatedProduct } from './types';
 
 interface RelatedProductsProps {
-  slugs: string[];
+  products: RelatedProduct[];
 }
 
-function RelatedCard({ slug }: { slug: string }) {
-  const product = PRODUCTS[slug];
+function RelatedCard({ product }: { product: RelatedProduct }) {
   const { addToCart } = useCart();
   const [added, setAdded] = useState(false);
-
-  if (!product) return null;
 
   const firstInStock = product.variants.find(v => v.stock > 0) ?? product.variants[0];
 
@@ -30,7 +27,7 @@ function RelatedCard({ slug }: { slug: string }) {
       slug:         product.slug,
       name:         product.name,
       scentFamily:  product.scentFamily,
-      image:        product.images[0],
+      image:        product.image,
       size:         firstInStock.size,
       pricePerUnit: firstInStock.price,
       qty:          1,
@@ -40,11 +37,11 @@ function RelatedCard({ slug }: { slug: string }) {
   }
 
   return (
-    <Link href={`/shop/${slug}`} className="group block shrink-0 w-[160px]">
+    <Link href={`/shop/${product.slug}`} className="group block shrink-0 w-[160px]">
       {/* Image */}
       <div className="relative w-full aspect-[3/4] overflow-hidden bg-muted mb-3">
         <Image
-          src={product.images[0]}
+          src={product.image}
           alt={product.name}
           fill
           sizes="160px"
@@ -93,9 +90,8 @@ function RelatedCard({ slug }: { slug: string }) {
   );
 }
 
-export default function RelatedProducts({ slugs }: RelatedProductsProps) {
-  const valid = slugs.filter(s => !!PRODUCTS[s]);
-  if (valid.length === 0) return null;
+export default function RelatedProducts({ products }: RelatedProductsProps) {
+  if (products.length === 0) return null;
 
   return (
     <motion.section
@@ -109,15 +105,15 @@ export default function RelatedProducts({ slugs }: RelatedProductsProps) {
       </h3>
 
       <div className="flex gap-4 overflow-x-auto scrollbar-none pb-1">
-        {valid.map((slug, i) => (
+        {products.map((product, i) => (
           <motion.div
-            key={slug}
+            key={product.id}
             initial={{ opacity: 0, x: 16 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.35, delay: i * 0.08, ease: 'easeOut' }}
           >
-            <RelatedCard slug={slug} />
+            <RelatedCard product={product} />
           </motion.div>
         ))}
       </div>

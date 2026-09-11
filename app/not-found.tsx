@@ -5,6 +5,8 @@ import connectDB from '@/lib/mongodb';
 import ProductModel from '@/models/Product';
 import NotFoundPopularProducts, { type QuickAddProduct } from '@/components/not-found-popular-products';
 
+export const revalidate = 60;
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const GOLD_GRADIENT =
   'linear-gradient(135deg, oklch(0.68 0.11 70) 0%, oklch(0.78 0.09 78) 60%, oklch(0.72 0.10 74) 100%)';

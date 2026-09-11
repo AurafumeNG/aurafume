@@ -5,21 +5,34 @@ import { Plus, ShoppingBag, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useCart } from '@/components/shop/cart-context';
-import { PRODUCTS } from './product-data';
-import type { PDPProduct } from './types';
+import type { PDPProduct, RelatedProduct } from './types';
 
 interface CompleteTheSetProps {
   mainProduct: PDPProduct;
-  bundleSlugs: string[];
+  bundleProducts: RelatedProduct[];
 }
 
-function BundleItem({ product, isMain }: { product: PDPProduct; isMain?: boolean }) {
+/** The main product and the bundle suggestions share just these fields. */
+type BundleEntry = Pick<RelatedProduct, 'id' | 'slug' | 'name' | 'scentFamily' | 'image' | 'variants'>;
+
+function mainAsBundleEntry(p: PDPProduct): BundleEntry {
+  return {
+    id:          p.id,
+    slug:        p.slug,
+    name:        p.name,
+    scentFamily: p.scentFamily,
+    image:       p.images[0] ?? '',
+    variants:    p.variants,
+  };
+}
+
+function BundleItem({ product, isMain }: { product: BundleEntry; isMain?: boolean }) {
   const firstInStock = product.variants.find(v => v.stock > 0) ?? product.variants[0];
   return (
     <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
       <div className="relative w-full max-w-[100px] aspect-square overflow-hidden bg-muted">
         <Image
-          src={product.images[0]}
+          src={product.image}
           alt={product.name}
           fill
           sizes="100px"
@@ -44,17 +57,13 @@ function BundleItem({ product, isMain }: { product: PDPProduct; isMain?: boolean
   );
 }
 
-export default function CompleteTheSet({ mainProduct, bundleSlugs }: CompleteTheSetProps) {
+export default function CompleteTheSet({ mainProduct, bundleProducts }: CompleteTheSetProps) {
   const { addToCart } = useCart();
   const [added, setAdded] = useState(false);
 
-  const bundleProducts = bundleSlugs
-    .map(s => PRODUCTS[s])
-    .filter(Boolean) as PDPProduct[];
-
   if (bundleProducts.length === 0) return null;
 
-  const allProducts = [mainProduct, ...bundleProducts];
+  const allProducts: BundleEntry[] = [mainAsBundleEntry(mainProduct), ...bundleProducts];
 
   const combinedPrice = allProducts.reduce((sum, p) => {
     const variant = p.variants.find(v => v.stock > 0) ?? p.variants[0];
@@ -70,7 +79,7 @@ export default function CompleteTheSet({ mainProduct, bundleSlugs }: CompleteThe
         slug:         p.slug,
         name:         p.name,
         scentFamily:  p.scentFamily,
-        image:        p.images[0],
+        image:        p.image,
         size:         variant.size,
         pricePerUnit: variant.price,
         qty:          1,

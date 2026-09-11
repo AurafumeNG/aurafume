@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
-    "start": "next start",
-    "seed": "tsx scripts/seed-products.ts"
+    "start": "next start"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

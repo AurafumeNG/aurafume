@@ -5,51 +5,13 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
-interface Category {
+export interface Category {
   id: string;
   name: string;
   descriptor: string;
   image: string;
   href: string;
 }
-
-const categories: Category[] = [
-  {
-    id: 'floral',
-    name: 'Floral',
-    descriptor: 'Romantic · Delicate',
-    image: '/images/image2.jpeg',
-    href: '/shop?scent=floral',
-  },
-  {
-    id: 'fresh',
-    name: 'Fresh',
-    descriptor: 'Clean · Airy',
-    image: '/images/image1.jpeg',
-    href: '/shop?scent=fresh',
-  },
-  {
-    id: 'woody',
-    name: 'Woody',
-    descriptor: 'Earthy · Grounded',
-    image: '/images/image3.jpeg',
-    href: '/shop?scent=woody',
-  },
-  {
-    id: 'oriental',
-    name: 'Oriental',
-    descriptor: 'Opulent · Warm',
-    image: '/images/image8.jpeg',
-    href: '/shop?scent=oriental',
-  },
-  {
-    id: 'bold',
-    name: 'Bold',
-    descriptor: 'Vivid · Unapologetic',
-    image: '/images/image4.jpeg',
-    href: '/shop?scent=bold',
-  },
-];
 
 function Tile({
   category,
@@ -97,8 +59,15 @@ function Tile({
   );
 }
 
-export default function CategoryHighlights() {
-  const [featured, ...rest] = categories;
+export default function CategoryHighlights({
+  categories,
+}: {
+  categories: Category[];
+}) {
+  // The mosaic needs at least a featured tile plus one companion to read as a grid
+  if (categories.length < 2) return null;
+
+  const [featured, ...rest] = categories.slice(0, 5);
 
   return (
     <section className="bg-card py-20 md:py-28">
@@ -140,7 +109,11 @@ export default function CategoryHighlights() {
           </motion.div>
 
           {/* 2×2 grid — right column */}
-          <div className="grid grid-cols-2 grid-rows-2 gap-3 h-[360px] lg:h-full">
+          <div
+            className={`grid gap-3 h-[360px] lg:h-full ${
+              rest.length > 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-1'
+            }`}
+          >
             {rest.map((cat, i) => (
               <motion.div
                 key={cat.id}

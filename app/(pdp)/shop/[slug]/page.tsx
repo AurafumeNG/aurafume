@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
 import ProductDetailClient from '@/components/pdp/product-detail-client';
+import { getRelatedProducts } from '@/lib/related-products';
 import type { PDPProduct } from '@/components/pdp/types';
 
 // ── DB → PDPProduct conversion ─────────────────────────────────────────────────
@@ -69,8 +70,6 @@ function dbToPDPProduct(p: DbProduct): PDPProduct {
       sillage: p.sillage || '—',
     },
     occasions: p.occasions,
-    relatedSlugs: [],
-    bundleSlugs: [],
   };
 }
 
@@ -94,11 +93,21 @@ export default async function ProductDetailPage({
   const product = dbToPDPProduct(raw);
   const productId = raw._id.toString();
 
+  // Preview renders without the related/bundle rails, so skip the extra queries.
+  const related = isPreview
+    ? []
+    : await getRelatedProducts(
+        { id: productId, fragranceFamilies: raw.fragranceFamilies ?? [] },
+        4,
+      );
+
   return (
     <ProductDetailClient
       product={product}
       productId={productId}
       isPreview={isPreview}
+      relatedProducts={related}
+      bundleProducts={related.slice(0, 2)}
     />
   );
 }

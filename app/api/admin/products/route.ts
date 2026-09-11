@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB                    from '@/lib/mongodb';
 import Product                      from '@/models/Product';
 import { requireAdmin }             from '@/lib/admin-auth';
+import { revalidateStorefront }     from '@/lib/revalidate-storefront';
 import type { ApiResponse }         from '@/types/auth';
 import type { IProduct }            from '@/models/Product';
 
@@ -151,6 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     const product = await Product.create(doc);
+    revalidateStorefront(product.slug);
 
     return NextResponse.json<ApiResponse<{ id: string; slug: string }>>(
       { success: true, data: { id: product._id.toString(), slug: product.slug } },

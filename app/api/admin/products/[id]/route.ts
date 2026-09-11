@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB                    from '@/lib/mongodb';
 import Product                      from '@/models/Product';
 import { requireAdmin }             from '@/lib/admin-auth';
+import { revalidateStorefront }     from '@/lib/revalidate-storefront';
 import type { ApiResponse }         from '@/types/auth';
 import type { IProduct }            from '@/models/Product';
 
@@ -186,6 +187,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json<ApiResponse>({ error: 'Product not found.' }, { status: 404 });
     }
 
+    revalidateStorefront((product as { slug?: string }).slug);
+
     return NextResponse.json<ApiResponse<unknown>>({ success: true, data: product });
   } catch (err: unknown) {
     console.error('[api/admin/products/[id] PATCH]', err);
@@ -220,6 +223,7 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
       if (!deleted) {
         return NextResponse.json<ApiResponse>({ error: 'Product not found.' }, { status: 404 });
       }
+      revalidateStorefront((deleted as { slug?: string }).slug);
       return NextResponse.json<ApiResponse>({ success: true, message: 'Product permanently deleted.' });
     }
 
@@ -233,6 +237,8 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
     if (!product) {
       return NextResponse.json<ApiResponse>({ error: 'Product not found.' }, { status: 404 });
     }
+
+    revalidateStorefront((product as { slug?: string }).slug);
 
     return NextResponse.json<ApiResponse>({ success: true, message: 'Product archived.' });
   } catch (err) {

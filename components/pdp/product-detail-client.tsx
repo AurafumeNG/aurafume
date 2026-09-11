@@ -16,18 +16,22 @@ import FragranceSpecsSection from '@/components/pdp/fragrance-specs';
 import RelatedProducts from '@/components/pdp/related-products';
 import CompleteTheSet from '@/components/pdp/complete-the-set';
 import StickyActionBar from '@/components/pdp/sticky-action-bar';
-import type { PDPProduct } from '@/components/pdp/types';
+import type { PDPProduct, RelatedProduct } from '@/components/pdp/types';
 
 interface ProductDetailClientProps {
   product: PDPProduct;
   productId: string;
   isPreview: boolean;
+  relatedProducts: RelatedProduct[];
+  bundleProducts: RelatedProduct[];
 }
 
 export default function ProductDetailClient({
   product,
   productId,
   isPreview,
+  relatedProducts,
+  bundleProducts,
 }: ProductDetailClientProps) {
   const firstInStockIdx = product.variants.findIndex((v) => v.stock > 0);
   const [variantIndex, setVariantIndex] = useState(
@@ -136,9 +140,9 @@ export default function ProductDetailClient({
             <>
               <CompleteTheSet
                 mainProduct={product}
-                bundleSlugs={product.bundleSlugs}
+                bundleProducts={bundleProducts}
               />
-              <RelatedProducts slugs={product.relatedSlugs} />
+              <RelatedProducts products={relatedProducts} />
             </>
           )}
         </div>

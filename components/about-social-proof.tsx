@@ -61,24 +61,31 @@ function Stat({
 }
 
 // ── Section ───────────────────────────────────────────────────────────────────
-const STATS = [
-  {
-    value:    1340,
-    suffix:   '+',
-    label:    'Happy Customers',
-    sublabel: 'Nigerians who trust us with their signature scent',
-  },
-  {
-    value:    64,
-    suffix:   '',
-    label:    'Signature Fragrances',
-    sublabel: 'Carefully curated, fully authenticated, ready to wear',
-  },
-] as const;
 
-export default function AboutSocialProof() {
+export interface SocialProofStats {
+  customerCount: number;
+  productCount:  number;
+}
+
+export default function AboutSocialProof({ stats }: { stats: SocialProofStats }) {
   const ref     = useRef<HTMLDivElement>(null);
   const [vis, setVis] = useState(false);
+
+  const STATS = [
+    {
+      value:    stats.customerCount,
+      // Only round up to a "+" once the number is large enough for it to mean something
+      suffix:   stats.customerCount >= 100 ? '+' : '',
+      label:    'Happy Customers',
+      sublabel: 'Nigerians who trust us with their signature scent',
+    },
+    {
+      value:    stats.productCount,
+      suffix:   '',
+      label:    'Signature Fragrances',
+      sublabel: 'Carefully curated, fully authenticated, ready to wear',
+    },
+  ];
 
   useEffect(() => {
     const el = ref.current;

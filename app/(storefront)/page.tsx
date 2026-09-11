@@ -7,10 +7,14 @@ import CategoryHighlights from '@/components/category-highlights';
 import BrandStory      from '@/components/brand-story';
 import BestSellers     from '@/components/product-carousel-alt';
 import ScentFinder     from '@/components/scent-finder';
-import Testimonials    from '@/components/testimonials';
 import type { Product } from '@/components/product-card';
 import type { Arrival } from '@/components/new-arrivals';
+import type { Category } from '@/components/category-highlights';
 import type { BestSellerProduct, BestSellerGender } from '@/components/product-carousel-alt';
+
+// Storefront content is prerendered, then refreshed at most once a minute.
+// Admin product writes also revalidate this path on demand for immediate updates.
+export const revalidate = 60;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +33,16 @@ interface DbProduct {
   isBestSeller:      boolean;
   isNewArrival:      boolean;
 }
+
+// Scent families the mosaic can surface, in the order they should appear.
+// A family only becomes a tile when at least one published product carries it.
+const SCENT_CATEGORIES: { id: string; name: string; descriptor: string }[] = [
+  { id: 'floral',   name: 'Floral',   descriptor: 'Romantic · Delicate'   },
+  { id: 'fresh',    name: 'Fresh',    descriptor: 'Clean · Airy'          },
+  { id: 'woody',    name: 'Woody',    descriptor: 'Earthy · Grounded'     },
+  { id: 'oriental', name: 'Oriental', descriptor: 'Opulent · Warm'        },
+  { id: 'citrus',   name: 'Citrus',   descriptor: 'Bright · Zesty'        },
+];
 
 function badge(p: DbProduct): string | undefined {
   if (p.isBestSeller) return 'Best Seller';
@@ -97,41 +111,59 @@ function toBestSeller(p: DbProduct): BestSellerProduct {
 const SELECT = 'name slug shortDescription fragranceFamilies gender images variants isBestSeller isNewArrival';
 const BASE   = { status: 'published', visibleInShop: true };
 
+/** Builds the "Shop by Scent" tiles from the families products actually have. */
+function toCategories(all: DbProduct[]): Category[] {
+  return SCENT_CATEGORIES.flatMap(({ id, name, descriptor }) => {
+    const cover = all.find(
+      p => p.fragranceFamilies.some(f => f.toLowerCase() === id) && p.images[0]?.url,
+    );
+    if (!cover) return [];
+    return [{
+      id,
+      name,
+      descriptor,
+      image: cover.images[0].url,
+      href:  `/shop?scent=${id}`,
+    }];
+  });
+}
+
 async function getStorefrontData() {
   try {
     await connectDB();
 
-    const [featuredRaw, newArrivalsRaw, bestSellersRaw] = await Promise.all([
+    const [featuredRaw, newArrivalsRaw, bestSellersRaw, allRaw] = await Promise.all([
       ProductModel.find({ ...BASE, isFeatured:   true }).sort({ createdAt: -1 }).limit(4).select(SELECT).lean(),
       ProductModel.find({ ...BASE, isNewArrival: true }).sort({ createdAt: -1 }).limit(3).select(SELECT).lean(),
       ProductModel.find({ ...BASE, isBestSeller: true }).sort({ createdAt: -1 }).limit(8).select(SELECT).lean(),
+      ProductModel.find(BASE).sort({ createdAt: -1 }).select('fragranceFamilies images').lean(),
     ]);
 
     return {
       featured:    (featuredRaw    as unknown as DbProduct[]).map(toFeatured),
       newArrivals: (newArrivalsRaw as unknown as DbProduct[]).map(toArrival),
       bestSellers: (bestSellersRaw as unknown as DbProduct[]).map(toBestSeller),
+      categories:  toCategories(allRaw as unknown as DbProduct[]),
     };
   } catch {
-    return { featured: [], newArrivals: [], bestSellers: [] };
+    return { featured: [], newArrivals: [], bestSellers: [], categories: [] };
   }
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default async function Home() {
-  const { featured, newArrivals, bestSellers } = await getStorefrontData();
+  const { featured, newArrivals, bestSellers, categories } = await getStorefrontData();
 
   return (
     <>
       <HeroSection />
       <FeaturedProducts products={featured} />
       <NewArrivals      arrivals={newArrivals} />
-      <CategoryHighlights />
+      <CategoryHighlights categories={categories} />
       <BrandStory />
       <BestSellers      products={bestSellers} />
       <ScentFinder />
-      <Testimonials />
     </>
   );
 }

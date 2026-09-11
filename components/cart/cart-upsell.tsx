@@ -1,21 +1,20 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ShoppingBag } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCart } from '@/components/shop/cart-context';
-import { PRODUCTS } from '@/components/pdp/product-data';
+import type { RelatedProduct } from '@/components/pdp/types';
 
 // ── Individual upsell card ─────────────────────────────────────────────────────
 
-function UpsellCard({ slug }: { slug: string }) {
+function UpsellCard({ product }: { product: RelatedProduct }) {
   const { addToCart } = useCart();
-  const product = PRODUCTS[slug];
-  if (!product) return null;
 
   const firstVariant = product.variants[0];
-  const image = product.images[0];
+  if (!firstVariant) return null;
 
   function handleQuickAdd() {
     addToCart({
@@ -23,7 +22,7 @@ function UpsellCard({ slug }: { slug: string }) {
       slug: product.slug,
       name: product.name,
       scentFamily: product.scentFamily,
-      image,
+      image: product.image,
       size: firstVariant.size,
       pricePerUnit: firstVariant.price,
       qty: 1,
@@ -38,10 +37,10 @@ function UpsellCard({ slug }: { slug: string }) {
       className="shrink-0 w-36 border border-border bg-background flex flex-col"
     >
       {/* Image */}
-      <Link href={`/shop/${slug}`} className="block shrink-0">
+      <Link href={`/shop/${product.slug}`} className="block shrink-0">
         <div className="relative w-full h-28 bg-muted overflow-hidden">
           <Image
-            src={image}
+            src={product.image}
             alt={product.name}
             fill
             sizes="144px"
@@ -58,7 +57,7 @@ function UpsellCard({ slug }: { slug: string }) {
 
       {/* Info */}
       <div className="flex flex-col gap-1 p-2.5 flex-1">
-        <Link href={`/shop/${slug}`} className="block">
+        <Link href={`/shop/${product.slug}`} className="block">
           <p className="text-[0.7rem] font-medium text-foreground leading-snug line-clamp-2">
             {product.name}
           </p>
@@ -89,23 +88,37 @@ function UpsellCard({ slug }: { slug: string }) {
 
 export default function CartUpsell() {
   const { items, savedItems } = useCart();
+  const [suggestions, setSuggestions] = useState<RelatedProduct[]>([]);
 
-  // Collect related slugs from all cart items, deduplicate, exclude already in cart/saved
-  const cartAndSavedSlugs = new Set([
-    ...items.map(i => i.slug),
-    ...savedItems.map(i => i.slug),
-  ]);
+  // Slugs already in the cart or saved — the API excludes cart slugs, we filter saved here
+  const cartSlugs  = items.map(i => i.slug);
+  const savedSlugs = savedItems.map(i => i.slug);
+  const cartKey    = cartSlugs.join(',');
 
-  const upsellSlugs = Array.from(
-    new Set(
-      items.flatMap(item => {
-        const product = PRODUCTS[item.slug];
-        return product?.relatedSlugs ?? [];
-      }),
-    ),
-  ).filter(slug => !cartAndSavedSlugs.has(slug) && slug in PRODUCTS);
+  useEffect(() => {
+    if (!cartKey) {
+      setSuggestions([]);
+      return;
+    }
 
-  if (upsellSlugs.length === 0) return null;
+    const controller = new AbortController();
+
+    fetch(`/api/products/upsell?slugs=${encodeURIComponent(cartKey)}`, {
+      signal: controller.signal,
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        if (json?.data) setSuggestions(json.data as RelatedProduct[]);
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, [cartKey]);
+
+  const savedSet = new Set(savedSlugs);
+  const visible  = suggestions.filter(p => !savedSet.has(p.slug));
+
+  if (visible.length === 0) return null;
 
   return (
     <motion.section
@@ -120,8 +133,8 @@ export default function CartUpsell() {
 
       {/* Horizontal scroll */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5 sm:-mx-8 sm:px-8 scrollbar-none">
-        {upsellSlugs.map(slug => (
-          <UpsellCard key={slug} slug={slug} />
+        {visible.map(product => (
+          <UpsellCard key={product.id} product={product} />
         ))}
       </div>
     </motion.section>
