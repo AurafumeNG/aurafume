@@ -41,7 +41,7 @@ export const CATEGORIES: FaqCategory[] = [
       },
       {
         q: 'Can I place a bulk order?',
-        a: 'Yes. For bulk or wholesale enquiries please reach out to us directly via email at hello@yourbrand.com or WhatsApp, and our team will assist you with pricing and availability.',
+        a: 'Yes — we also sell wholesale. Wholesale and bulk buyers should call us on +234 701 400 6235 or email aurafumeng@gmail.com, and our team will assist you with pricing and availability. You can also visit our Wholesale page for more details.',
       },
     ],
   },

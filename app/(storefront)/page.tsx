@@ -7,6 +7,7 @@ import CategoryHighlights from '@/components/category-highlights';
 import BrandStory      from '@/components/brand-story';
 import BestSellers     from '@/components/product-carousel-alt';
 import ScentFinder     from '@/components/scent-finder';
+import WholesaleBanner from '@/components/wholesale-banner';
 import type { Product } from '@/components/product-card';
 import type { Arrival } from '@/components/new-arrivals';
 import type { Category } from '@/components/category-highlights';
@@ -163,6 +164,7 @@ export default async function Home() {
       <CategoryHighlights categories={categories} />
       <BrandStory />
       <BestSellers      products={bestSellers} />
+      <WholesaleBanner />
       <ScentFinder />
     </>
   );

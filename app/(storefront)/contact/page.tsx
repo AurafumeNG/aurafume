@@ -1,6 +1,7 @@
 import ContactPageHeader   from '@/components/contact-page-header';
 import ContactOptionsBlock from '@/components/contact-options-block';
 import ContactForm         from '@/components/contact-form';
+import WholesaleCallout    from '@/components/wholesale-callout';
 import FaqCallout          from '@/components/faq-callout';
 import ContactMapEmbed     from '@/components/contact-map-embed';
 
@@ -15,6 +16,7 @@ export default function ContactPage() {
     <>
       <ContactPageHeader />
       <ContactOptionsBlock />
+      <WholesaleCallout />
       <ContactForm />
       <FaqCallout />
       <ContactMapEmbed />

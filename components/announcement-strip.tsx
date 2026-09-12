@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
+import { WHOLESALE_PHONE_DISPLAY } from '@/lib/wholesale';
 
 const messages = [
   {
@@ -19,6 +20,11 @@ const messages = [
     text: 'Use code AURA15 for 15% off your first order',
     cta: 'Claim Offer',
     href: '/shop',
+  },
+  {
+    text: `Buying wholesale? Call ${WHOLESALE_PHONE_DISPLAY}`,
+    cta: 'Learn More',
+    href: '/wholesale',
   },
 ];
 
