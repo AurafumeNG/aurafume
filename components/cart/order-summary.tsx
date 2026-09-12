@@ -116,6 +116,7 @@ function PaymentIcons() {
         <MastercardMark />
         <VerveMark />
       </div>
+
       {/* <p className="text-[0.54rem] tracking-[0.12em] uppercase text-muted-foreground/60">
         Secure & encrypted checkout
       </p> */}
