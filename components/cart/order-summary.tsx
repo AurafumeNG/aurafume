@@ -124,8 +124,6 @@ function PaymentIcons() {
   );
 }
 
-// ── Line item ──────────────────────────────────────────────────────────────────
-
 function Line({
   label,
   value,
