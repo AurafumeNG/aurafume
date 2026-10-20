@@ -20,28 +20,51 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
+    const verificationToken       = crypto.randomBytes(32).toString('hex');
+    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+
     const existing = await User.findOne({ email: email.toLowerCase().trim() });
-    if (existing) {
+
+    if (existing && (existing.isVerified || existing.provider !== 'local')) {
       return NextResponse.json<ApiResponse>(
         { error: 'An account with this email already exists.' },
         { status: 409 },
       );
     }
 
-    const verificationToken       = crypto.randomBytes(32).toString('hex');
-    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+    if (existing) {
+      // Unverified local account (e.g. a previous attempt whose email never arrived) —
+      // let the shopper sign up again rather than locking them out.
+      existing.firstName               = firstName.trim();
+      existing.lastName                = lastName.trim();
+      existing.phone                   = phone?.trim();
+      existing.password                = password;
+      existing.verificationToken       = verificationToken;
+      existing.verificationTokenExpiry = verificationTokenExpiry;
+      await existing.save();
+    } else {
+      await User.create({
+        firstName: firstName.trim(),
+        lastName:  lastName.trim(),
+        email:     email.toLowerCase().trim(),
+        phone:     phone?.trim(),
+        password,
+        verificationToken,
+        verificationTokenExpiry,
+      });
+    }
 
-    await User.create({
-      firstName: firstName.trim(),
-      lastName:  lastName.trim(),
-      email:     email.toLowerCase().trim(),
-      phone:     phone?.trim(),
-      password,
-      verificationToken,
-      verificationTokenExpiry,
-    });
-
-    await sendVerificationEmail(email.trim(), verificationToken, firstName.trim());
+    try {
+      await sendVerificationEmail(email.trim(), verificationToken, firstName.trim());
+    } catch (mailErr) {
+      // The account is saved and unverified, so submitting again (or "resend" on the
+      // login page) will retry the email.
+      console.error('[api/auth/signup] verification email failed', mailErr);
+      return NextResponse.json<ApiResponse>(
+        { error: "We couldn't send your verification email. Please try again in a moment." },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json<ApiResponse>(
       { success: true, message: 'Account created! Please check your email to verify your account.' },

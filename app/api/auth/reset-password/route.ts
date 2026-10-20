@@ -35,6 +35,10 @@ export async function POST(req: NextRequest) {
     user.password                 = password;
     user.resetPasswordToken       = undefined;
     user.resetPasswordTokenExpiry = undefined;
+    // Following the emailed reset link proves the shopper owns this address
+    user.isVerified               = true;
+    user.verificationToken        = undefined;
+    user.verificationTokenExpiry  = undefined;
     await user.save();
 
     return NextResponse.json<ApiResponse>({

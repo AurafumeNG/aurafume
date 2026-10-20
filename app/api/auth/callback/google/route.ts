@@ -72,10 +72,11 @@ export async function GET(req: NextRequest) {
     });
 
     if (!user) {
-      const nameParts = (profile.name ?? '').split(' ');
+      // `||` not `??` — Google may return empty strings, which the schema rejects
+      const nameParts = (profile.name ?? '').trim().split(/\s+/);
       user = await User.create({
-        firstName:  profile.given_name  ?? nameParts[0]                  ?? 'User',
-        lastName:   profile.family_name ?? nameParts.slice(1).join(' ')  ?? '',
+        firstName:  profile.given_name  || nameParts[0]                  || 'User',
+        lastName:   profile.family_name || nameParts.slice(1).join(' ')  || '-',
         email:      profile.email.toLowerCase(),
         googleId:   profile.id,
         provider:   'google',

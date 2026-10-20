@@ -71,6 +71,8 @@ function LoginInner() {
   const [errors,   setErrors]   = useState<{ email?: string; password?: string }>({});
   const [serverError, setServerError] = useState('');
   const [isLoading,   setIsLoading]   = useState(false);
+  const [unverified,  setUnverified]  = useState(false);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   function validateField(field: 'email' | 'password', val: string) {
     if (field === 'email') {
@@ -97,6 +99,8 @@ function LoginInner() {
 
     setIsLoading(true);
     setServerError('');
+    setUnverified(false);
+    setResendState('idle');
     try {
       const res  = await fetch('/api/auth/login', {
         method: 'POST',
@@ -106,6 +110,7 @@ function LoginInner() {
       const data = await res.json() as { error?: string };
       if (!res.ok) {
         setServerError(data.error ?? 'Login failed. Please try again.');
+        setUnverified(res.status === 403);
       } else {
         await refresh();
         router.push(redirectTo);
@@ -115,6 +120,27 @@ function LoginInner() {
       setServerError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setResendState('sending');
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        setServerError(data.error ?? 'Could not resend the email. Please try again.');
+        setResendState('idle');
+      } else {
+        setResendState('sent');
+      }
+    } catch {
+      setServerError('Network error. Please try again.');
+      setResendState('idle');
     }
   }
 
@@ -177,7 +203,23 @@ function LoginInner() {
               className="flex items-start gap-2 px-3 py-2.5 border border-destructive/30 bg-destructive/8 overflow-hidden"
             >
               <AlertCircle size={12} className="text-destructive mt-0.5 shrink-0" strokeWidth={2} />
-              <p className="text-[0.58rem] tracking-[0.04em] text-destructive leading-relaxed">{serverError}</p>
+              <div className="space-y-1.5">
+                <p className="text-[0.58rem] tracking-[0.04em] text-destructive leading-relaxed">{serverError}</p>
+                {unverified && (
+                  resendState === 'sent' ? (
+                    <p className="text-[0.56rem] tracking-[0.04em] text-accent/90 leading-relaxed">
+                      A new verification link is on its way — check your inbox and spam folder.
+                    </p>
+                  ) : (
+                    <button
+                      type="button" onClick={handleResend} disabled={resendState === 'sending'}
+                      className="text-[0.56rem] tracking-[0.06em] text-foreground underline underline-offset-2 hover:text-accent transition-colors disabled:opacity-60"
+                    >
+                      {resendState === 'sending' ? 'Sending…' : 'Resend verification email'}
+                    </button>
+                  )
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
